@@ -1,0 +1,211 @@
+class com.williamgilreath.Test :
+
+
+   +CONST = nil; # stupid constant using nil
+   +PI    = 3.145789;
+   +E     = 2.41E23;
+   +DUH   = 23E-27;
+   +DOH   = 1234567890;
+   +LIT   = 'lit';
+   +STR   = "hello world!!!";
+
+
+   @testenum = red, green, blue;
+
+   ~iattr = nil; #instance attribute
+   -sattr = nil; #singular attribute
+
+   #null param
+   !funcNone:
+        done;
+
+   .
+
+   #one param func
+   !funcOne i :
+       i = i + 1;
+       = i;
+   .
+
+   #many param func
+   !funcMany @param :
+
+      do(i=0,i<%param,i++)
+         echo: param@i, eol;
+      .
+
+   .
+
+   #static method
+   &funcSingular :
+
+      = nil;
+   .
+
+   &funcSingularMany @param :
+       = nil;
+   .
+
+   &funcTwoParam i,j :
+
+       k = i+j;
+       done;
+   .
+
+   +DOH    = on ;  #error invalid tok const element rval
+
+   ~myAttr = do ;  #error invalid tok instance attribute rval
+
+   -itAttr = do ;  #error invalid tok static attribute rval
+
+:  #main method of class
+
+#   x!nil;
+
+#  1 2 3 4        5
+   x = $ localVar ;
+
+   #y = $ do ` attr      ; #error do instead of primary, func, meta
+
+#   y = $ on ` attr       ; #error do instead of primary, func, meta
+
+%x = $if ;
+
+/*
+   follow an expression: symbols need lineNum, linePos:
+
+   semicolon ;
+   rparen    )
+   comma     ,
+
+*/
+
+
+   on( %on)
+   |0,1,2 : ;
+   .
+#*/
+
+# % glob = < | >;
+
+# %declare = if;  #error invalid tok declare stmt rval
+
+#  1 2 3  4
+   j = do ; #error invalid tok assign stmt rval
+#  1 2 3 4 5  6
+
+
+   on(x+1)
+   |0,1,2 : my!meth012;
+   |2,3,4 : my!meth234;
+   else
+            my!methElse;
+   .
+
+
+   #do each
+   do(x : glob)
+       echo:x,eol;
+   .
+
+   #do expr
+   do(x < y)
+       ;
+   .
+
+   if(true)
+      ;
+   . #end if
+
+   x = y;
+
+   file!open:"mydata.dat";
+
+   try
+       file!close;
+   on
+       snap; #re-snap trap
+   else
+       file = nil;
+   do
+       snap "FileTrap", "File closing error!";
+   .
+
+
+   /* very simple try statement */
+   try
+       ;
+   on
+       ;
+   else
+       ;
+   do
+       ;
+   .#end try
+
+   ;
+
+   %declare = nil;
+
+
+
+   x = 3;
+
+   #do range
+   do(i=0,i<10,i++)
+       echo:i, eol;
+       ;
+   .
+
+   %boolFlag = false;
+
+   own(my)
+     ;
+   .
+
+   /*echo: "Hello \u000? world";  #invalid symbol in unicode char */
+   ; ; ;
+
+
+   /* infinite do */
+   do()
+      cut 0;
+
+   .
+
+#if(x +« y) ; .
+
+#%x = ‶hello";
+
+#%num = 373if ;   /* expected separator or operator char with numeric token */
+
+# test for invalid length single comment > 1024
+
+# test for invalid length multiple comment > 65536
+
+
+#%x =   '\\u????' ;
+
+   end 1;
+
+% id0123456789ABCDEFGHIJKLMNOPQRSTUVWX0123456789ABCDEFGHIJKLMNOPQRSTUVWX0123456789ABCDEFGHIJKLMNOPQRSTUVWX0123456789ABCDEFGHIJKLMNOPQRSTUVWX0123456789ABCDEFGHIJKLMNOPQRSTUVWX0123456789ABCDEFGHIJKLMNOPQRSTUVWX0123456789ABCDEFGHIJKLMNOPQRSTUVWX0123456789ABCDEFGHIJKLMNOPQRSTUVWX = 0 ;
+
+/*
+# 0 1   2 3
+#  % lit = "0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz0123456789_ABCEDFGHIJKLMNOPQRSTUVWXYZ$abcdefghijklmnopqrstuvwxyz" ;
+
+#  0 1   2 3                      4
+#   % hex = 0xffffffffffffffffffff ;
+
+   #%hex = 0xfJff;
+   #%hex = 0xCAFE;
+*/
+   %testSum = x + y + z + q ;
+   %testAdd = (x+y) * (z+q) ;
+/*
+©
+#*/
+
+.#end class
+
+#try with on-statement, do-statement to test parse ambiguity

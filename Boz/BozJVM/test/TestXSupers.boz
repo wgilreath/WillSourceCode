@@ -1,0 +1,15 @@
+class com.williamgilreath.TestXSupers
+
+#< com.williamgilreath.TestXSupers = doh
+
+< com.williamgilreath.Test1=test1
+< com.williamgilreath.Test2=test1   #duplicate ident
+
+< com.williamgilreath.Test1=test3   #duplicate name
+
+:
+
+    ~test3 = nil;
+    ~test4 = nil;
+
+.

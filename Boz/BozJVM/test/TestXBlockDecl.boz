@@ -1,0 +1,89 @@
+class com.williamgilreath.TestXBlockDecl :
+
+!testOnStmt :
+    ;
+    on(x)
+    |0,1 : ;
+    |2,3 : ;
+    else
+         done;
+    .
+.
+
+
+!testMethod:
+
+    %var0 = 0;
+    %var1 = 1;
+    #%var0 = nil;
+
+    do(x<y)
+        #cut 16;
+        ;
+    .
+
+
+    done;
+
+    do()
+
+        do()
+
+            #end 2;
+
+        . #end do 1
+
+    . #end do 0
+
+    #cut;
+
+    if(x1)
+        if(x2)
+            if(x3)
+                if(x4)
+                    if(x5)
+                        if(x6)
+                            if(x7)
+                               #%var1 = nil;
+                               if(x7)
+                                   if(x8)
+                                       if(x9)
+                                           if(x10)
+                                               if(x11)
+                                                   if(x12)
+                                                       if(x13)
+                                                           if(x14)
+                                                               if(x15)
+                                                                 /*
+                                                                 %var0 = nil;
+                                                                 if(x16)
+                                                                    ;
+                                                                 .
+                                                                 #*/
+                                                               .
+                                                           .
+                                                       .
+                                                   .
+                                               .
+                                           .
+                                       .
+                                   .
+                               .
+                            .
+                        .
+                    .
+                .
+
+            .
+
+        .
+
+    .
+
+.
+
+:
+
+    ;
+    exit:0;
+.

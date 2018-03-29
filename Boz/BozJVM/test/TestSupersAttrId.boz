@@ -1,0 +1,10 @@
+class TestSupersAttrId < supers1=var1 < supers2=var2 < supers3=var3 :
+
+
+    ~var1 = nil;
+    ~var2 = nil;
+    ~var3 = nil;
+
+
+
+.

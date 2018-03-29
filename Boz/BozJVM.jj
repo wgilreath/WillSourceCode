@@ -1,0 +1,3630 @@
+/**
+       Title: Boz Grammar/Parser Version 0.99879514
+
+      Author: William F. Gilreath    (will@williamgilreath.com)
+
+    Homepage: http://www.bozlang.org
+
+     Summary: Boz.jj - JavaCC grammar for Boz programming language.
+
+    License:  This program is free software: you can redistribute it
+    and/or modify it under the terms of the GNU General Public License
+    as published by the Free Software Foundation, either version 3 of
+    the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+    You  must accept the terms of the GNU General Public License
+    (GPL) license agreement to use this software.
+
+    Copyright (c) November 27 2010; All Rights Reserved.
+
+**/
+
+options
+{
+    JAVA_UNICODE_ESCAPE = true;
+}
+
+PARSER_BEGIN(BozCompiler)
+
+import com.williamgilreath.BoolContext;
+import com.williamgilreath.Code;
+import com.williamgilreath.ICompiler;
+import com.williamgilreath.LabelVector;
+import com.williamgilreath.Name;
+import com.williamgilreath.OrderedMap;
+import com.williamgilreath.OrderedVector;
+import com.williamgilreath.Scope;
+import com.williamgilreath.StringVector;
+
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+
+
+public final class BozCompiler implements ICompiler
+{
+    //maximum literal string length
+    public final static int    MAX_LIT_STRING_LEN = 1024;
+    
+    //maximum lexeme identifier length
+    public final static int    MAX_ID_LEN = 256;
+
+    //maximum number of initial glob parameters
+    public final static int MAX_GLOB_INIT = 65536;
+
+    //maximum parameters to a method--0...16, or 1...17
+    public final static int    MAX_PARAMS = 17;
+
+    //maximum parameter of scope depth--0..16
+    public final static int    MAX_SCOPE  = 17;
+
+    //default dummy variable param id for variable args
+    public final static String VAR_ARG_ID = "_xarg";
+
+    //unit class or program flag
+    public static boolean unitClassFlag = false;
+
+    public static String  unitPckg = null; //unit package namespace
+    public static Name    unitName = null; //unit name <package + id>
+    public static String  unitId   = null; //unit id name identifier
+
+    public static String codeBody = null;  //unit code body
+    public static String codeBlck = null;  //unit code block
+
+    //list of super-classes
+    public final static OrderedVector superList = new OrderedVector();
+
+    //super-class attribute code
+    public static String codeSuper = null;
+
+    //list-set of variable declarations
+    public final static Scope localVar  = Scope.getScope();
+
+    //list of included types => import NAME
+    public final static OrderedVector    typeList  = new OrderedVector();
+
+    //map of alias => type
+    public final static OrderedMap typeAlias = new OrderedMap();
+
+    //map of name => alias
+    public final static OrderedVector nameAlias = new OrderedVector();
+
+    //list of error messages
+    public final static StringVector     errorList = new StringVector();
+
+    //do-statement depth counter semantic check
+    public static int                    doCounter    = 0;
+
+    //try do-block statement depth counter semantic check
+    public static int                    tryDoCounter = 0;
+
+    //list-set of traps in try statement
+    public final static OrderedVector    trapList   = new OrderedVector();
+    public       static int              tryCounter = 0;
+
+    //map-table of unit instance methods
+    public final static OrderedMap imthdMap  = new OrderedMap();
+
+    //list-set of instance methods
+    public final static OrderedVector    imthdList = new OrderedVector();
+
+    //map-table of unit static methods
+    public final static OrderedMap smthdMap  = new OrderedMap();
+
+    //list-set of static methods
+    public final static OrderedVector    smthdList = new OrderedVector();
+
+    //list-set of unit instance attributes
+    public final static OrderedVector    iattrMap  = new OrderedVector();
+
+    //list-set of unit singular attributes
+    public final static OrderedVector    sattrMap  = new OrderedVector();
+
+    //static context flag - singular attribute or method
+    public       static boolean          staticCtxFlag = false;
+
+    //static expression flag - primary is static type alias
+    public       static boolean          staticExpFlag = false;
+
+    //static boolean context within do-loop
+    public final static BoolContext doCtx  = new BoolContext();
+
+    //static boolean context within local block of statements
+    public final static BoolContext blkCtx = new BoolContext(); 
+
+    //static boolean context within try-block of statements and methods
+    public final static BoolContext tryCtx = new BoolContext();     
+
+    public static String  declareVar    = null;
+
+    public static boolean isDeclareFlag = false;
+
+    public final static LabelVector label = new LabelVector();
+
+/*                                                                         */
+    //Boz Host Programming Language Keywords Sorted
+    public final static String[] HOST_KEYWORD = new String[]
+    {
+        "abstract", "as", "assert",
+        "base", "bool", "boolean",
+        "break", "byte", "case",
+        "catch", "char", "checked",
+        "const", "continue", "decimal",
+        "default", "delegate", "double",
+        "enum", "event", "explicit",
+        "extends", "extern", "final",
+        "finally","fixed", "float",
+        "for", "foreach", "goto",
+        "implements", "implicit", "import",
+        "in", "instanceof", "int",
+        "interface", "internal", "is",
+        "lock", "long", "namespace",
+        "native", "null", "object",
+        "operator", "out", "override",
+        "package", "params", "private",
+        "protected", "public", "readonly",
+        "ref", "return", "sbyte",
+        "sealed", "short", "sizeof",
+        "stackalloc", "static", "strictfp",
+        "string", "struct", "super",
+        "switch", "synchronized", "this",
+        "throw", "throws", "transient",
+        "typeof", "uint", "ulong",
+        "unchecked", "unsafe", "ushort",
+        "using", "virtual", "void",
+        "volatile", "while"
+    };
+
+    public final static boolean isZeroLiteral(final String value)
+    {
+        final char[] chars = value.toCharArray();
+
+        for(int i = 0; i < chars.length; i++)
+        {
+            switch (chars[i])
+            {
+              case '1':
+              case '2':
+              case '3':
+              case '4':
+              case '5':
+              case '6':
+              case '7':
+              case '8':
+              case '9':
+                        return false;
+              case 'd':
+              case 'D':
+              case 'e':
+              case 'E':
+                        return true;
+            }//end switch
+        }//end for
+
+        return true;
+
+    }//end isZeroLiteral
+
+    public final static boolean checkRangeDbl(String dbl)
+    {
+        Double value = null;
+
+        try
+        {
+            value = Double.valueOf(dbl).doubleValue();
+        }
+        catch(Exception ex)
+        {
+            return false;
+        }//end try
+
+        if (Double.isInfinite(value))
+        {
+            return false;
+        }//end if
+
+        //cannot be negative since - is an operator
+        if (value == 0 && !isZeroLiteral(dbl))
+        {
+            return false;
+        }//end if
+
+        return true;
+
+    }//end checkRangeDbl
+
+    public final static boolean checkRangeLng(String lng)
+    {
+        Long value = null;
+        try
+        {
+            if (lng.startsWith("0"))
+            {
+                value = Long.valueOf(lng, 16);
+            }
+            else
+            {
+                value = Long.valueOf(lng, 10);
+            }//end if
+        }
+        catch(Exception ex)
+        {
+            return false;
+        }//end try
+
+        return true;
+
+    }//end checkRangeLng
+
+    //auxillary method to search table of host language keywords
+    public final static boolean binarySearch(final String[] list, final String key)
+    {
+        int lo = -1, hi = list.length, at;
+
+        while(hi - lo > 1)
+        {
+            at = (lo+hi) / 2;
+
+            if(list[at].compareTo(key) > 0)
+                hi = at;
+            else
+            if(list[at].compareTo(key) < 0)
+                lo = at;
+            else
+            if(list[at].compareTo(key) == 0)
+                return true;
+
+        }//end while
+
+        return false;
+
+    }//end binarySearch
+
+    //check within context if identifier is host language keyword
+    public final static boolean isHostKeyword(final String id)
+    {
+        return binarySearch(HOST_KEYWORD, id);
+    }//end isHostKeyword
+
+    //check within context if statement is reachable in sequence
+    public final static boolean checkCtx()
+    {
+       return blkCtx.flag() || tryCtx.flag() ;
+    }//end checkCtx
+
+    public final static void addUnitName(final Name name)
+    {
+        unitName = name;
+        if(name.hasPrefix()) 
+            unitPckg = name.prefix();
+        unitId = name.suffix();
+    }//end addUnitName
+
+    public final static void addUnitCode(final String body)
+    {
+        codeBody = body;
+    }//end addUnitCode
+
+    public final static void addUnitCode(final String body,
+                                         final String block)
+    {
+        codeBody = body;
+        codeBlck = block;
+    }//end addUnitCode
+
+    /*-------------------- instance utility methods --------------------*/
+
+    public final static boolean isVarArgIMethod(final String key)
+    {
+        if(imthdMap.has(key)) 
+            return false;
+
+        return imthdList.has(key);
+    }//end isVarArgMethod
+
+    public final static boolean hasIMethod(final String key, final int index)
+    {
+       boolean result = false;
+
+       //method with more MAX_PARAMS never found
+       if(index >= MAX_PARAMS) return false;
+
+       if(imthdMap.has(key))
+       {
+            final Boolean[] table = (Boolean[]) imthdMap.get(key);
+
+            if(table == null)
+                result = false;
+
+            result = table[index] != null;
+       }//end if
+
+       return result;
+    }//end hasMethod
+
+    public final static void addIMethod(final String key, final int index)
+    {
+        if(index >= MAX_PARAMS) return;
+
+        Boolean[] table = (Boolean[]) imthdMap.get(key);
+
+        if(table == null) table = new Boolean[MAX_PARAMS];
+
+        table[index] = Boolean.TRUE;
+        imthdMap.add(key, table);
+        
+        addIMethodList(key); //add to method list
+
+    }//end addIMethod
+
+    public final static void addIMethodList(final String key)
+    {
+        if(imthdList.has(key))
+            return;
+
+        imthdList.add(key);
+    }//end addMethodList
+
+    /*-------------------- singular utility methods --------------------*/
+
+    public final static boolean isVarArgSMethod(final String key)
+    {
+        if(smthdMap.has(key))
+            return false;
+
+        return smthdList.has(key);
+    }//end isVarArgSMethod
+
+    public final static boolean hasSMethod(final String key, final int index)
+    {
+        boolean result = false;
+
+        //method with more MAX_PARAMS never found
+        if(index >= MAX_PARAMS) return false;
+
+        if(smthdMap.has(key))
+        {
+            final Boolean[] table = (Boolean[]) smthdMap.get(key);
+
+            if(table == null)
+                result = false;
+            result = table[index] != null;
+        }//end if
+
+       return result;
+    }//end hasSMethod
+
+    public final static void addSMethod(final String key, final int index)
+    {
+        if(index >= MAX_PARAMS) return;
+
+        Boolean[] table = (Boolean[]) smthdMap.get(key);
+
+        if(table == null) table = new Boolean[MAX_PARAMS];
+
+        table[index] = Boolean.TRUE;
+        smthdMap.add(key, table);
+
+        addSMethodList(key); //add to method list
+
+    }//end addSMethod
+
+    public final static void addSMethodList(final String key)
+    {
+        if(smthdList.has(key)) return;
+
+        smthdList.add(key);
+    }//end addSMethodList
+
+    public final static void addName(final Name name)
+    {
+        if(name.hasPrefix())
+        {
+            unitPckg = name.prefix();
+        }//end if
+
+        unitId = name.suffix();
+    }//end addName
+
+    public final static void addType(final Name name)
+    {
+        if(name.size() > 1)
+        {
+            typeList.add(name);
+        }//end if
+    }//end addType
+
+    public final static void addAlias(final String alias, final Name name)
+    {
+        typeAlias.add(alias,name);
+        nameAlias.add(name);
+    }//end addAlias
+
+    public final static boolean hasName(final Name name)
+    {
+        return nameAlias.has(name);
+    }//end hasName
+
+    public final static boolean hasAlias(final String alias)
+    {
+        return typeAlias.has(alias);
+    }//end hasAlias
+
+    public final static Name getAlias(final String alias)
+    {
+        return (Name) typeAlias.get(alias);
+    }//end getAlias
+
+    public final static void error(final String text)
+    {
+        errorList.add(text);
+    }//end error
+
+    public static int counterIntVar = 0;
+
+    public final static String uniqueIntVar()
+    {
+        return "_int"+Integer.toString(counterIntVar++);
+    }//end uniqueIntVar
+
+    //Code to create instance attribute method:
+    //    _iget(String): IHandle  for 0...n-1 of N attributes
+    public final static String emitIAttr()
+    {
+        Code code = new Code();
+
+        code.eol(2);
+
+        code.cat("public final IHandle _iget(final String attr){");
+        code.eol();
+
+        String attr = null;
+        
+        if(iattrMap.size() > 0)
+        {
+            attr = (String) iattrMap.get(0);
+
+            code.add("    if(attr.equals(\"");
+            code.add(attr.substring(0,attr.length()-1)+"\"))");
+            code.cat("        return "+attr+";");
+
+            for(int x=1;x<iattrMap.size();x++)
+            {
+                attr = (String) iattrMap.get(x);
+
+                //check if attr in superList, do not synthesize
+                //code for super-class attribute ?? 7-28-2008   
+
+                code.cat("    else ");
+                code.add("    if(attr.equals(\"");
+                code.add(attr.substring(0,attr.length()-1));
+                code.add("\"))");
+                code.cat("        return "+attr+";");
+
+            }//end for
+
+            code.cat("    else ");
+
+        }//end if
+
+        code.spc(8);
+        
+	code.add("throw new BozTrap(\"RuntimeTrap\",\"Attribute: \"");
+        code.add("+attr.toString()+");
+        code.cat(" \" not found in class.\" ); ");
+        
+	code.eol();
+        
+	code.cat("}");
+
+        code.eol();
+
+        return code.toString();
+
+    }//end emitIAttr
+
+    //Code to create static attribute method:
+    //    _sget(String): IHandle  for 0...n-1 of N attributes 
+    public final static String emitSAttr()
+    {
+        Code code = new Code();
+
+        code.eol(2);
+
+        code.cat("public final static IHandle _sget(final String attr){");
+        code.eol();
+    
+        String attr = null;
+        
+        if(sattrMap.size() > 0)
+        {
+            attr = (String) sattrMap.get(0);
+
+            code.add("    if(attr.equals(\"");
+            code.add(attr.substring(0,attr.length()-1));
+            code.cat("\"))");
+            code.cat("        return "+attr+";");
+
+            for(int x=1;x<sattrMap.size();x++)
+            {
+                attr = (String) sattrMap.get(x);
+
+                //check if attr in superList, do not synthesize
+                //code for super-class attribute ?? 7-28-2008   
+
+                code.cat("    else ");
+                code.cat("    if(attr.equals(\"");
+                code.add(attr.substring(0,attr.length()-1));
+                code.add("\"))");
+                code.cat("        return "+attr+";");
+
+            }//end for
+
+            code.cat("    else ");
+
+        }//end if
+
+        code.spc(8);
+        code.add("throw new BozTrap(\"RuntimeTrap\",\"Attribute:  \"");
+        code.add("+attr.toString()+");
+        code.cat("\" not found in class.\"); ");
+
+        code.eol();
+        code.cat("}");
+
+        code.eol(2);
+
+        return code.toString();
+
+    }//end emitSAttr
+
+    public final static String emitICall()
+    {
+        Code          code        = new Code();
+
+        code.eol(3);
+
+        //code for _idx -- index of super-classes used by _icall method
+        code.eol();
+        code.cat("public final IHandle[] _idx;");
+
+        //code for _icall -- standard boilerplate
+        code.eol(2);
+        code.add(emitIMethodCall() );
+        code.eol(2);
+
+        //code for _iexec
+        code.add( emitIMethodExec() );
+        code.eol(2);
+
+        return code.toString();
+
+    }//end emitICall
+
+    public final static String emitConstruct()
+    {
+        Code code = new Code();
+
+        code.eol(2);
+
+        code.add("public ");
+        code.add(unitId.toString());
+        code.cat("(){");
+
+        code.eol();
+        code.cat("        this._my  = this;");
+        code.eol();
+        code.cat("        this._idx = new IHandle[] ");
+        code.cat("        {                         ");
+        code.cat("            this._my  ");
+
+        //add any super-classes
+        for (int x = 0; x < superList.size(); x++)
+        {
+            code.add(",");
+            code.eol();
+            code.add("        ");
+            code.add((String) superList.get(x));
+            code.add(" ");
+        }//end for
+
+        code.cat("        };");
+
+        code.cat("}");
+        code.eol(2);
+
+        return code.toString();
+
+    }//end emitConstruct
+
+    public final static String emitHandle()
+    {
+        Code code = new Code();
+
+        code.cat("public final IHandle _my;");
+
+        code.eol(2);
+        code.cat("private       IHandle _ival = RT.nil();");
+        code.eol();
+        code.cat("private BozTrap _myTrap = null;");
+
+        code.eol();
+        code.cat("public final IHandle _get(){  return this._ival; } ");
+        code.eol();
+        code.add("public final void    _set(final IHandle hdl)");
+        code.cat("{ this._ival = hdl._get(); } ");
+        code.eol();
+        code.cat("public final boolean  _isNumber(){ return false; } ");
+        code.cat("public final boolean  _isString(){ return false; } ");
+        code.cat("public final boolean  _isStream(){ return false; } ");
+        code.cat("public final boolean  _isBool(){ return false; }   ");
+        code.cat("public final boolean  _isGlob(){ return false; }   ");
+        code.cat("public final boolean  _isObject(){ return false; } ");
+        code.cat("public final boolean  _isInstance(){ return true; }");
+
+        code.eol(2);
+
+        code.add("public final int      _size()");
+        code.add("{  throw new BozTrap(\"NonGlobSize\",");
+        code.cat("\"Size non-existent for non-glob.\"); } ");
+
+        code.add("public final IHandle  _at(final IHandle   hdl)");
+        code.add("{ throw new BozTrap(\"");
+        code.cat("NonGlobIndexAccess\",\"Access non-glob with index.\"); }");
+
+        code.add("public final IHandle  _by(final IHandle[] hdl)");
+        code.add("{ throw new BozTrap(\"");
+        code.add("NonGlobAssociativeAccess\",");
+        code.cat("\"Access non-glob with key.\"); }");
+
+        code.add("public final IHandle  _of(final int       pos)");
+        code.add("{ throw new BozTrap(\"");
+        code.add("NonGlobPositionAccess\",");
+        code.cat("\"Access non-glob with native int index.\"); }");
+
+        code.eol(2);
+
+        code.cat("public final BozNumber _val(){");
+        code.cat("   this._icall(\"val\", RT.box()); ");
+        code.cat("   return this._get()._val();  ");
+        code.cat("}");
+	    code.eol();
+
+	    code.cat("public final BozString _str(){");
+        code.cat("   this._icall(\"str\", RT.box()); ");
+        code.cat("   return this._get()._str();  ");
+	    code.cat("}");
+        code.eol();
+        
+	    code.add("public final IHandle   _import(IHandle hdl)");
+        code.add("{ throw new BozTrap(\"");
+        code.cat("NonStreamTrap\",\"Import on non-stream\"); }");
+        
+
+	    code.add("public final IHandle   _export(IHandle hdl)");
+        code.add("{ throw new BozTrap(\"");
+        code.cat("NonStreamTrap\",\"Export on non-stream\"); }");
+       
+        
+	    code.add("public final String  toString()");
+        code.add("{ return this._str().toString();");
+        code.cat(" }                                       ");
+        
+	    code.add("public final Double  toNumber()");
+        code.add("{ return this._val().toNumber();");
+        code.cat(" }                                       ");
+        
+	    code.add("public final boolean toBool(){ throw new BozTrap(\"");
+        code.cat("NonBoolTrap\",\"Non Boolean value on instance.\"); } ");
+
+        return code.toString();
+    }//end emitHandle
+
+    public final static String emitHead()
+    {
+        Code code = new Code();
+
+        code.eol(2);
+
+        code.add("public final class ");
+        code.add(unitId.toString());
+        code.cat(" implements IHandle { ");
+        code.eol(2);
+
+        return code.toString();
+    }//end emitHead
+
+    public final static String emitIMethodExec()
+    {
+        final Code code = new Code();
+
+        code.add("public final boolean _iexec");
+        code.cat("(final String mthd, IHandle[] args){");
+        code.eol();
+        code.cat("    boolean result = true;");
+        code.eol(2);
+
+        for(int x=0;x<imthdList.size();x++)
+        {
+            final String mthd = (String) imthdList.get(x);
+
+            code.cat("    if(mthd.equals(\""+mthd+"\"))");
+
+            if(isVarArgIMethod(mthd))
+            {
+                code.cat("        this."+mthd+"_(args);");
+            }
+            else
+            {
+                code.add( emitIMethodFixArgs(mthd) );
+            }//end if
+
+            code.cat("    else");
+
+        }//end for
+
+        code.cat("        result =  false;");
+        code.eol();
+        code.cat("    return result;");
+        code.cat("}");
+
+        return code.toString();
+    }//end emitIMethodExec
+
+    public final static String emitIMethodFixArgs(final String mthd)
+    {
+        final Code code = new Code();
+
+        code.cat("        switch(args.length){");
+
+        final Boolean[] argv = (Boolean[]) imthdMap.get(mthd);
+
+        for(int x=0;x<argv.length;x++)
+        {
+            if(argv[x] != null)
+            {
+                code.add("            case "+x+" : "+mthd+"_(");
+                for(int y=0;y<x;y++)
+                {
+                    code.add("args["+y+"]");
+                    if(y < x-1) code.add(", ");
+                }//end for
+
+               code.cat("); break;");
+
+            }//end if
+
+        }//end for
+
+        code.cat("            default : break; ");
+        code.eol();
+        code.cat("        }");
+
+        return code.toString();
+    }//end emitIMethodFixArgs
+
+    public final static String emitIMethodCall()
+    {
+        final Code code = new Code();
+
+        code.add("public final IHandle _icall(final String mthd, ");
+        code.cat("IHandle[] args)                                ");
+        code.cat("{                                              ");
+        code.cat("  this._ival = RT.obj(RT.nil());               ");
+        code.eol();
+        code.cat("  for(int x=0;x<_idx.length;x++){              ");
+        code.cat("      if(_idx[x]._iexec(mthd,args)){           ");
+        code.cat("           this._ival = _idx[x]._get();        ");
+        code.eol();
+        code.cat("           return this._ival;                  ");
+        code.eol();
+        code.cat("      }                                        ");
+        code.eol();
+        code.cat("  }                                            ");
+        code.eol();
+        code.add("    throw new BozTrap(\"RuntimeTrap\",\"Method:");
+        code.add("\"+mthd+\" of: \"+args.length+\" parameters not");
+        code.cat(" found in class.\"); ");
+        code.eol();
+        code.cat("}                                              ");
+        code.eol();
+
+        return code.toString();
+
+    }//end emitIMethodCall
+
+    public final static String emitSMethodExec()
+    {
+        final Code code = new Code();
+
+        final String clsName = unitId; //get unit class name, XXX
+
+        code.eol();
+        code.cat("public static IHandle    _sval = null;");
+        code.eol();
+        code.add("public final static void _sret(final IHandle _rval){ ");
+        code.add(clsName);
+        code.add("._sval = _rval; ");
+        code.cat("}");
+        code.eol(2);
+
+        code.add("public final static IHandle _scall(final String mthd, ");
+        code.cat("final IHandle[] args){");
+        code.eol();
+
+        if(smthdList.size() > 0)
+        {
+            code.add("    ");
+            code.add(clsName);
+            code.cat("._sval = RT.obj(RT.nil());");
+            code.eol();
+        }//end if
+        
+        code.eol();
+
+        for(int x=0;x<smthdList.size();x++)
+        {
+            final String mthd = (String) smthdList.get(x);
+
+            if(x > 0) code.cat("    else");
+
+            code.cat("    if(mthd.equals(\""+mthd+"\"))");
+
+            if(isVarArgSMethod(mthd))
+            {
+                code.cat("        this."+mthd+"_(args);");
+            }
+            else
+            {
+                code.add( emitSMethodFixArgs(mthd) );
+            }//end if
+
+            //code.cat("    else");
+            //code.cat("        throw new BozTrap(\"RuntimeTrap\",\"");
+            //code.cat("Static method not found:  \"+mthd);");
+            //code.eol();
+
+        }//end for
+
+        //code.eol();
+
+        if(smthdList.size() > 0)
+        {
+            code.add("    else");
+            code.eol();
+            code.add("        throw new BozTrap(\"RuntimeTrap\",\"");
+            code.cat("Static method not found:  \"+mthd);");
+       
+            code.eol();
+            code.add("    return ");
+            code.add(clsName);
+            code.add("._sval;");
+            code.eol();
+        }
+        else
+        {
+            code.eol();
+            code.add("        throw new BozTrap(\"RuntimeTrap\",\"");
+            code.cat("Static method not found:  \"+mthd);");
+        }//end if
+
+
+        code.eol();
+        code.cat("}");
+
+        return code.toString();
+    }//end emitSMethodExec
+
+    public final static String emitSMethodFixArgs(final String mthd)
+    {
+        final Code code = new Code();
+
+        code.cat("        switch(args.length){");
+
+        final Boolean[] argv = (Boolean[]) smthdMap.get(mthd);
+
+        for(int x=0;x<argv.length;x++)
+        {
+            if(argv[x] != null)
+            {
+                code.add("            case "+x+" : "+mthd+"_(");
+                for(int y=0;y<x;y++)
+                {
+                    code.add("args["+y+"]");
+                    if(y < x-1) code.add(", ");
+                }//end for
+
+                code.cat("); break;");
+
+            }//end if
+
+        }//end for
+
+        code.cat("            default : break; ");
+        code.eol();
+        code.cat("        }");
+
+        return code.toString();
+    }//end emitSMethodFixArgs
+
+    public final static String emitNamespace()
+    {
+        Code          code        = new Code();
+
+        code.eol(2);
+
+        if(unitPckg != null)
+        {
+            code.cat("package "+unitPckg+"; ");
+        }//end if
+
+        code.eol(2);
+
+        return code.toString();
+    }//end emitNamespace
+
+    public final static String emitInclude()
+    {
+        Code          code        = new Code();
+        OrderedVector includeList = new OrderedVector();
+
+        code.cat(emitNamespace());
+
+        final String[] standardInclude = new String[]
+        {
+            "import org.bozlang.OrderedMap;",
+            "import org.bozlang.BozBool;",
+            "import org.bozlang.BozGlob;",
+            "import org.bozlang.BozIO;",
+            "import org.bozlang.BozNil;",
+            "import org.bozlang.BozNumber;",
+            "import org.bozlang.BozObject;",
+            "import org.bozlang.BozString;",
+            "import org.bozlang.BozTrap;",
+            "import org.bozlang.IHandle;",
+            "import org.bozlang.RT;",
+            ""
+        };
+
+        //add standard includes to includeList
+        for(int x=0;x<standardInclude.length;x++)
+        {
+            includeList.add(standardInclude[x]);
+        }//end for
+
+        //add type aliases to includeList
+        for(int x=0;x<typeList.size();x++)
+        {
+            includeList.add("import "+((Name)typeList.get(x)).toString()+";");
+        }//end for
+
+        //add include list to code
+        code.eol();
+        for(int x=0;x<includeList.size(); x++)
+        {
+            code.cat((String) includeList.get(x));
+        }//end for
+
+        code.eol();
+
+        return code.toString();
+    }//end emitInclude
+
+    public final static String emitUnit()
+    {
+        Code code = new Code();
+        code.eol();
+
+        if(unitClassFlag)
+        {
+            if(codeBody != null)
+            {
+                code.eol();
+                code.cat(codeBody);
+                code.eol(2);
+            }//end if
+
+	    code.eol(2);
+        }
+        else
+        {
+            code.eol(2);
+
+            if(codeBody != null)
+            {
+                code.eol();
+                code.cat(codeBody);
+                code.eol(2);
+            }//end if
+
+            code.eol(2);
+            code.cat("private final void _lambda(){");
+            code.eol();
+            code.cat(codeBlck);
+            code.eol();
+            code.cat("}");
+            code.eol(2);
+
+            code.cat("public final static void main(final String[] args){");
+            code.eol();
+
+            code.add("    final ");
+            code.add(unitName.toString());  //suffix for typename?? 7-28-2008
+            code.add(" _it = new ");
+            code.add(unitName.toString());
+            code.add("(); ");
+            code.eol(2);
+            code.cat("    RT.init(args);        ");
+
+            code.cat("    try {                 ");
+            code.eol();
+            code.cat("        _it._lambda();    ");
+            code.eol();
+            code.cat("    }catch(BozTrap _bt){  ");
+            code.cat("        RT.kill(_bt);     ");
+            code.cat("    }catch(Exception _ex){");
+            code.cat("        RT.kill(_ex);     ");
+            code.cat("    }catch(Error _er){    ");
+            code.cat("        RT.kill(_er);     ");
+            code.cat("    }                     ");
+            code.eol();
+            code.cat("    RT.halt();            ");
+
+            code.eol();
+            code.cat("}                         ");
+
+        }//end if
+
+        code.eol();
+        return code.toString();
+    }//end emitUnit
+
+    public final static String emit()
+    {
+        Code code = new Code();
+
+        code.eol(2);
+
+        code.add(emitInclude());
+
+        code.eol(2);
+
+        code.cat(emitHead());
+        code.eol(2);
+
+        if(codeSuper != null)
+        {
+            code.cat(codeSuper); //emitSupers()??
+            code.eol(2);
+        }//end if
+
+        code.cat(emitConstruct());
+        code.eol(2);
+
+        code.cat(emitHandle());
+
+        code.eol(2);
+        code.cat(emitUnit());
+        code.eol(2);
+        code.add(emitIAttr()); //add synthesized code for _iget
+        code.eol(2);
+        code.add(emitICall()); //add synthesized code for _idx, _icall, _iexec
+        code.eol(4);
+        code.add(emitSAttr());
+        code.eol(4);
+        code.add(emitSMethodExec());
+        code.eol(2);
+        code.cat("}");  //class footer
+        code.eol(2);
+
+        return code.toString();
+    }//end emit
+
+    public final static BozCompiler initialize(java.io.InputStream stream)
+    {
+        return new BozCompiler(stream);
+    }//end initialize
+
+    public final boolean compile()
+    {
+         try
+         {
+            BozCompiler.Start();
+         }
+         catch (ParseException e)
+         {
+            error(e.getMessage());
+         }//end try
+
+         return errorList.isEmpty();
+    }//end compile
+
+    public final String getCode()
+    {
+        return emit();
+    }//end getCode
+
+    public final Name getName()
+    {
+        return BozCompiler.unitName;
+    }//end getName
+
+    public final String getErrors()//String[] ??
+    {
+        return errorList.toString();
+    }//end getErrors
+
+    public final boolean isUnitClass()
+    {
+        return BozCompiler.unitClassFlag;
+    }//end isUnitClass
+
+    public final static void main(String args[])
+    {
+        ICompiler comp = null;
+
+        if (args.length == 0)
+        {
+            System.out.println("Reading from standard input...");
+            comp = BozCompiler.initialize(System.in);
+        }
+        else
+        if (args.length == 1)
+        {
+            System.out.println("Reading from file: " + args[0] + ".");
+
+            try
+            {
+                comp = initialize(new FileInputStream(args[0]));
+            }
+            catch (FileNotFoundException e)
+            {
+                System.err.println("File " + args[0] + " not found.");
+                System.exit(1);
+            }//end try
+        }
+        else
+        {
+            System.err.println("Usage is one of:");
+            System.err.println("         java BozCompiler inputfile");
+            System.exit(1);
+        }//end if
+
+        System.out.println();
+        if(comp.compile())
+        {
+            System.out.println(comp.getCode());
+        }
+        else
+        {
+            System.out.print("Compiler Errors:  ");
+            System.out.println(comp.getErrors());
+            System.exit(1);
+        }//end if
+
+        System.exit(0);
+    }//end main
+
+}//end class
+
+PARSER_END(BozCompiler)
+
+/* WHITE SPACE */
+
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+| "\f"
+}
+
+/* COMMENTS */
+
+MORE :
+{
+  "#"  : IN_SINGLE_LINE_COMMENT
+|
+  "/*" : IN_MULTI_LINE_COMMENT
+}
+
+<IN_SINGLE_LINE_COMMENT>
+SPECIAL_TOKEN :
+{
+  <SINGLE_LINE_COMMENT: "\n" | "\r" | "\r\n" > : DEFAULT
+}
+
+<IN_MULTI_LINE_COMMENT>
+SPECIAL_TOKEN :
+{
+  <MULTI_LINE_COMMENT: "*/" > : DEFAULT
+}
+
+<IN_SINGLE_LINE_COMMENT,IN_MULTI_LINE_COMMENT>
+MORE :
+{
+  < ~[] >
+}
+
+/* KEYWORDS, FUNCTIONS AND LITERALS */
+
+TOKEN :
+{
+
+//Boz reserved words
+
+  < CLASS: "class" >
+| < CUT:   "cut"   >
+| < DO:    "do"    >
+| < DONE:  "done"  >
+| < EF:    "ef"    >
+| < ELSE:  "else"  >
+| < END:   "end"   >
+| < IF:    "if"    >
+| < IT:    "it"    >
+| < MY:    "my"    >
+| < ON:    "on"    >
+| < SNAP:  "snap"  >
+| < TRY:   "try"   >
+
+//Boz predefined functions
+
+| < ARGS:  "args"  >
+| < CATCH: "catch" >
+| < CAUSE: "cause" >
+| < DIE:   "die"   >
+| < ECHO:  "echo"  >
+| < EOL:   "eol"   >
+| < EXIT:  "exit"  >
+| < FALSE: "false" >
+| < NEW:   "new"   >
+| < NIL:   "nil"   >
+| < SCAN:  "scan"  >
+| < TRUE:  "true"  >
+
+}
+
+/* LITERALS */
+
+TOKEN :
+{
+  < INTEGER_LITERAL:
+        <DECIMAL_LITERAL> | <HEX_LITERAL> 
+  >
+|
+  < DECIMAL_LITERAL: ["0"-"9"] (["0"-"9"])* >
+|
+  < #HEX_LITERAL: "0" ["x","X"] (["0"-"9","a"-"f","A"-"F"])+ >
+|
+  < FLOATING_POINT_LITERAL:
+        (["0"-"9"])+ "." (["0"-"9"])* (<EXPONENT>)?
+      | "." (["0"-"9"])+ (<EXPONENT>)?
+      | (["0"-"9"])+ <EXPONENT>
+      | (["0"-"9"])+ (<EXPONENT>)?
+  >
+|
+  < #EXPONENT: ["e","E"] (["+","-"])? (["0"-"9"])+ >
+|
+  < CHARACTER_LITERAL:
+      "'"
+      (   (~["'","\\","\n","\r"])
+        | ("\\"
+            ( ["n","t","b","r","f","\\","'","\""]
+            | ["0"-"7"] ( ["0"-"7"] )?
+            | ["0"-"3"] ["0"-"7"] ["0"-"7"]
+            )
+          )
+      )
+      "'"
+  >
+|
+  < STRING_LITERAL:
+      "\""
+       (   
+            (~["\"","\\","\n","\r"])
+        | 
+            ("\\"
+                (   ["n","t","b","r","f","\\","'","\""]
+                    | ["0"-"7"] ( ["0"-"7"] )?
+                    | ["0"-"3"] ["0"-"7"] ["0"-"7"]
+                )
+            )
+        )*
+      "\""
+  >
+}
+
+/* IDENTIFIERS */
+
+TOKEN :
+{
+  < IDENTIFIER: <LETTER> (<PART_LETTER>)* >
+|
+  < #LETTER:
+    [
+    "A"-"Z","a"-"z","\u00a2"-"\u00a5","\u00aa","\u00b5","\u00ba",
+    "\u00c0"-"\u00d6","\u00d8"-"\u00f6","\u00f8"-"\u021f","\u0222"-"\u0233",
+    "\u0250"-"\u02ad","\u02b0"-"\u02b8","\u02bb"-"\u02c1","\u02d0"-"\u02d1",
+    "\u02e0"-"\u02e4","\u02ee","\u037a","\u0386","\u0388"-"\u038a","\u038c",
+    "\u038e"-"\u03a1","\u03a3"-"\u03ce","\u03d0"-"\u03d7","\u03da"-"\u03f3",
+    "\u0400"-"\u0481","\u048c"-"\u04c4","\u04c7"-"\u04c8","\u04cb"-"\u04cc",
+    "\u04d0"-"\u04f5","\u04f8"-"\u04f9","\u0531"-"\u0556","\u0559",
+    "\u0561"-"\u0587","\u05d0"-"\u05ea","\u05f0"-"\u05f2","\u0621"-"\u063a",
+    "\u0640"-"\u064a","\u0671"-"\u06d3","\u06d5","\u06e5"-"\u06e6",
+    "\u06fa"-"\u06fc","\u0710","\u0712"-"\u072c","\u0780"-"\u07a5",
+    "\u0905"-"\u0939","\u093d","\u0950","\u0958"-"\u0961",
+    "\u0985"-"\u098c","\u098f"-"\u0990","\u0993"-"\u09a8","\u09aa"-"\u09b0",
+    "\u09b2","\u09b6"-"\u09b9","\u09dc"-"\u09dd","\u09df"-"\u09e1",
+    "\u09f0"-"\u09f3","\u0a05"-"\u0a0a","\u0a0f"-"\u0a10","\u0a13"-"\u0a28",
+    "\u0a2a"-"\u0a30","\u0a32"-"\u0a33","\u0a35"-"\u0a36","\u0a38"-"\u0a39",
+    "\u0a59"-"\u0a5c","\u0a5e","\u0a72"-"\u0a74","\u0a85"-"\u0a8b",
+    "\u0a8d","\u0a8f"-"\u0a91","\u0a93"-"\u0aa8","\u0aaa"-"\u0ab0",
+    "\u0ab2"-"\u0ab3","\u0ab5"-"\u0ab9","\u0abd","\u0ad0","\u0ae0",
+    "\u0b05"-"\u0b0c","\u0b0f"-"\u0b10","\u0b13"-"\u0b28","\u0b2a"-"\u0b30",
+    "\u0b32"-"\u0b33","\u0b36"-"\u0b39","\u0b3d","\u0b5c"-"\u0b5d",
+    "\u0b5f"-"\u0b61","\u0b85"-"\u0b8a","\u0b8e"-"\u0b90","\u0b92"-"\u0b95",
+    "\u0b99"-"\u0b9a","\u0b9c","\u0b9e"-"\u0b9f","\u0ba3"-"\u0ba4",
+    "\u0ba8"-"\u0baa","\u0bae"-"\u0bb5","\u0bb7"-"\u0bb9","\u0c05"-"\u0c0c",
+    "\u0c0e"-"\u0c10","\u0c12"-"\u0c28","\u0c2a"-"\u0c33","\u0c35"-"\u0c39",
+    "\u0c60"-"\u0c61","\u0c85"-"\u0c8c","\u0c8e"-"\u0c90","\u0c92"-"\u0ca8",
+    "\u0caa"-"\u0cb3","\u0cb5"-"\u0cb9","\u0cde","\u0ce0"-"\u0ce1",
+    "\u0d05"-"\u0d0c","\u0d0e"-"\u0d10","\u0d12"-"\u0d28","\u0d2a"-"\u0d39",
+    "\u0d60"-"\u0d61","\u0d85"-"\u0d96","\u0d9a"-"\u0db1","\u0db3"-"\u0dbb",
+    "\u0dbd","\u0dc0"-"\u0dc6","\u0e01"-"\u0e30","\u0e32"-"\u0e33",
+    "\u0e3f"-"\u0e46","\u0e81"-"\u0e82","\u0e84","\u0e87"-"\u0e88","\u0e8a",
+    "\u0e8d","\u0e94"-"\u0e97","\u0e99"-"\u0e9f","\u0ea1"-"\u0ea3","\u0ea5",
+    "\u0ea7","\u0eaa"-"\u0eab","\u0ead"-"\u0eb0","\u0eb2"-"\u0eb3","\u0ebd",
+    "\u0ec0"-"\u0ec4","\u0ec6","\u0edc"-"\u0edd","\u0f00","\u0f40"-"\u0f47",
+    "\u0f49"-"\u0f6a","\u0f88"-"\u0f8b","\u1000"-"\u1021","\u1023"-"\u1027",
+    "\u1029"-"\u102a","\u1050"-"\u1055","\u10a0"-"\u10c5","\u10d0"-"\u10f6",
+    "\u1100"-"\u1159","\u115f"-"\u11a2","\u11a8"-"\u11f9","\u1200"-"\u1206",
+    "\u1208"-"\u1246","\u1248","\u124a"-"\u124d","\u1250"-"\u1256","\u1258",
+    "\u125a"-"\u125d","\u1260"-"\u1286","\u1288","\u128a"-"\u128d",
+    "\u1290"-"\u12ae","\u12b0","\u12b2"-"\u12b5","\u12b8"-"\u12be",
+    "\u12c0","\u12c2"-"\u12c5","\u12c8"-"\u12ce","\u12d0"-"\u12d6",
+    "\u12d8"-"\u12ee","\u12f0"-"\u130e","\u1310","\u1312"-"\u1315",
+    "\u1318"-"\u131e","\u1320"-"\u1346","\u1348"-"\u135a","\u13a0"-"\u13f4",
+    "\u1401"-"\u166c","\u166f"-"\u1676","\u1681"-"\u169a","\u16a0"-"\u16ea",
+    "\u1780"-"\u17b3","\u17db","\u1820"-"\u1877","\u1880"-"\u18a8",
+    "\u1e00"-"\u1e9b","\u1ea0"-"\u1ef9","\u1f00"-"\u1f15","\u1f18"-"\u1f1d",
+    "\u1f20"-"\u1f45","\u1f48"-"\u1f4d","\u1f50"-"\u1f57","\u1f59","\u1f5b",
+    "\u1f5d","\u1f5f"-"\u1f7d","\u1f80"-"\u1fb4","\u1fb6"-"\u1fbc","\u1fbe",
+    "\u1fc2"-"\u1fc4","\u1fc6"-"\u1fcc","\u1fd0"-"\u1fd3","\u1fd6"-"\u1fdb",
+    "\u1fe0"-"\u1fec","\u1ff2"-"\u1ff4","\u1ff6"-"\u1ffc","\u203f"-"\u2040",
+    "\u207f","\u20a0"-"\u20af","\u2102","\u2107","\u210a"-"\u2113",
+    "\u2115","\u2119"-"\u211d","\u2124","\u2126","\u2128","\u212a"-"\u212d",
+    "\u212f"-"\u2131","\u2133"-"\u2139","\u2160"-"\u2183","\u3005"-"\u3007",
+    "\u3021"-"\u3029","\u3031"-"\u3035","\u3038"-"\u303a","\u3041"-"\u3094",
+    "\u309d"-"\u309e","\u30a1"-"\u30fe","\u3105"-"\u312c","\u3131"-"\u318e",
+    "\u31a0"-"\u31b7","\u3400"-"\u4db5","\u4e00"-"\u9fa5","\ua000"-"\ua48c",
+    "\uac00"-"\ud7a3","\uf900"-"\ufa2d","\ufb00"-"\ufb06","\ufb13"-"\ufb17",
+    "\ufb1d","\ufb1f"-"\ufb28","\ufb2a"-"\ufb36","\ufb38"-"\ufb3c",
+    "\ufb3e","\ufb40"-"\ufb41","\ufb43"-"\ufb44","\ufb46"-"\ufbb1",
+    "\ufbd3"-"\ufd3d","\ufd50"-"\ufd8f","\ufd92"-"\ufdc7","\ufdf0"-"\ufdfb",
+    "\ufe33"-"\ufe34","\ufe4d"-"\ufe4f","\ufe69","\ufe70"-"\ufe72",
+    "\ufe74","\ufe76"-"\ufefc","\uff04","\uff21"-"\uff3a","\uff3f",
+    "\uff41"-"\uff5a","\uff65"-"\uffbe","\uffc2"-"\uffc7","\uffca"-"\uffcf",
+    "\uffd2"-"\uffd7","\uffda"-"\uffdc","\uffe0"-"\uffe1","\uffe5"-"\uffe6"
+    ]
+  >
+|
+  < #PART_LETTER:
+    [
+    "\u0000"-"\u0008","\u000e"-"\u001b","0"-"9","A"-"Z","_","a"-"z",
+    "\u007f"-"\u009f","\u00a2"-"\u00a5","\u00aa","\u00b5","\u00ba",
+    "\u00c0"-"\u00d6","\u00d8"-"\u00f6","\u00f8"-"\u021f","\u0222"-"\u0233",
+    "\u0250"-"\u02ad","\u02b0"-"\u02b8","\u02bb"-"\u02c1","\u02d0"-"\u02d1",
+    "\u02e0"-"\u02e4","\u02ee","\u0300"-"\u034e","\u0360"-"\u0362","\u037a",
+    "\u0386","\u0388"-"\u038a","\u038c","\u038e"-"\u03a1",
+    "\u03a3"-"\u03ce","\u03d0"-"\u03d7","\u03da"-"\u03f3","\u0400"-"\u0481",
+    "\u0483"-"\u0486","\u048c"-"\u04c4","\u04c7"-"\u04c8","\u04cb"-"\u04cc",
+    "\u04d0"-"\u04f5","\u04f8"-"\u04f9","\u0531"-"\u0556","\u0559",
+    "\u0561"-"\u0587","\u0591"-"\u05a1","\u05a3"-"\u05b9","\u05bb"-"\u05bd",
+    "\u05bf","\u05c1"-"\u05c2","\u05c4","\u05d0"-"\u05ea",
+    "\u05f0"-"\u05f2","\u0621"-"\u063a","\u0640"-"\u0655","\u0660"-"\u0669",
+    "\u0670"-"\u06d3","\u06d5"-"\u06dc","\u06df"-"\u06e8","\u06ea"-"\u06ed",
+    "\u06f0"-"\u06fc","\u070f"-"\u072c","\u0730"-"\u074a","\u0780"-"\u07b0",
+    "\u0901"-"\u0903","\u0905"-"\u0939","\u093c"-"\u094d","\u0950"-"\u0954",
+    "\u0958"-"\u0963","\u0966"-"\u096f","\u0981"-"\u0983","\u0985"-"\u098c",
+    "\u098f"-"\u0990","\u0993"-"\u09a8","\u09aa"-"\u09b0","\u09b2",
+    "\u09b6"-"\u09b9","\u09bc","\u09be"-"\u09c4","\u09c7"-"\u09c8",
+    "\u09cb"-"\u09cd","\u09d7","\u09dc"-"\u09dd","\u09df"-"\u09e3",
+    "\u09e6"-"\u09f3","\u0a02","\u0a05"-"\u0a0a","\u0a0f"-"\u0a10",
+    "\u0a13"-"\u0a28","\u0a2a"-"\u0a30","\u0a32"-"\u0a33","\u0a35"-"\u0a36",
+    "\u0a38"-"\u0a39","\u0a3c","\u0a3e"-"\u0a42","\u0a47"-"\u0a48",
+    "\u0a4b"-"\u0a4d","\u0a59"-"\u0a5c","\u0a5e","\u0a66"-"\u0a74",
+    "\u0a81"-"\u0a83","\u0a85"-"\u0a8b","\u0a8d","\u0a8f"-"\u0a91",
+    "\u0a93"-"\u0aa8","\u0aaa"-"\u0ab0","\u0ab2"-"\u0ab3","\u0ab5"-"\u0ab9",
+    "\u0abc"-"\u0ac5","\u0ac7"-"\u0ac9","\u0acb"-"\u0acd","\u0ad0",
+    "\u0ae0","\u0ae6"-"\u0aef","\u0b01"-"\u0b03","\u0b05"-"\u0b0c",
+    "\u0b0f"-"\u0b10","\u0b13"-"\u0b28","\u0b2a"-"\u0b30","\u0b32"-"\u0b33",
+    "\u0b36"-"\u0b39","\u0b3c"-"\u0b43","\u0b47"-"\u0b48","\u0b4b"-"\u0b4d",
+    "\u0b56"-"\u0b57","\u0b5c"-"\u0b5d","\u0b5f"-"\u0b61","\u0b66"-"\u0b6f",
+    "\u0b82"-"\u0b83","\u0b85"-"\u0b8a","\u0b8e"-"\u0b90","\u0b92"-"\u0b95",
+    "\u0b99"-"\u0b9a","\u0b9c","\u0b9e"-"\u0b9f","\u0ba3"-"\u0ba4",
+    "\u0ba8"-"\u0baa","\u0bae"-"\u0bb5","\u0bb7"-"\u0bb9","\u0bbe"-"\u0bc2",
+    "\u0bc6"-"\u0bc8","\u0bca"-"\u0bcd","\u0bd7","\u0be7"-"\u0bef",
+    "\u0c01"-"\u0c03","\u0c05"-"\u0c0c","\u0c0e"-"\u0c10","\u0c12"-"\u0c28",
+    "\u0c2a"-"\u0c33","\u0c35"-"\u0c39","\u0c3e"-"\u0c44","\u0c46"-"\u0c48",
+    "\u0c4a"-"\u0c4d","\u0c55"-"\u0c56","\u0c60"-"\u0c61","\u0c66"-"\u0c6f",
+    "\u0c82"-"\u0c83","\u0c85"-"\u0c8c","\u0c8e"-"\u0c90","\u0c92"-"\u0ca8",
+    "\u0caa"-"\u0cb3","\u0cb5"-"\u0cb9","\u0cbe"-"\u0cc4","\u0cc6"-"\u0cc8",
+    "\u0cca"-"\u0ccd","\u0cd5"-"\u0cd6","\u0cde","\u0ce0"-"\u0ce1",
+    "\u0ce6"-"\u0cef","\u0d02"-"\u0d03","\u0d05"-"\u0d0c","\u0d0e"-"\u0d10",
+    "\u0d12"-"\u0d28","\u0d2a"-"\u0d39","\u0d3e"-"\u0d43","\u0d46"-"\u0d48",
+    "\u0d4a"-"\u0d4d","\u0d57","\u0d60"-"\u0d61","\u0d66"-"\u0d6f",
+    "\u0d82"-"\u0d83","\u0d85"-"\u0d96","\u0d9a"-"\u0db1","\u0db3"-"\u0dbb",
+    "\u0dbd","\u0dc0"-"\u0dc6","\u0dca","\u0dcf"-"\u0dd4",
+    "\u0dd6","\u0dd8"-"\u0ddf","\u0df2"-"\u0df3","\u0e01"-"\u0e3a",
+    "\u0e3f"-"\u0e4e","\u0e50"-"\u0e59","\u0e81"-"\u0e82","\u0e84",
+    "\u0e87"-"\u0e88","\u0e8a","\u0e8d","\u0e94"-"\u0e97","\u0e99"-"\u0e9f",
+    "\u0ea1"-"\u0ea3","\u0ea5","\u0ea7","\u0eaa"-"\u0eab",
+    "\u0ead"-"\u0eb9","\u0ebb"-"\u0ebd","\u0ec0"-"\u0ec4","\u0ec6",
+    "\u0ec8"-"\u0ecd","\u0ed0"-"\u0ed9","\u0edc"-"\u0edd","\u0f00",
+    "\u0f18"-"\u0f19","\u0f20"-"\u0f29","\u0f35","\u0f37","\u0f39",
+    "\u0f3e"-"\u0f47","\u0f49"-"\u0f6a","\u0f71"-"\u0f84","\u0f86"-"\u0f8b",
+    "\u0f90"-"\u0f97","\u0f99"-"\u0fbc","\u0fc6","\u1000"-"\u1021",
+    "\u1023"-"\u1027","\u1029"-"\u102a","\u102c"-"\u1032","\u1036"-"\u1039",
+    "\u1040"-"\u1049","\u1050"-"\u1059","\u10a0"-"\u10c5","\u10d0"-"\u10f6",
+    "\u1100"-"\u1159","\u115f"-"\u11a2","\u11a8"-"\u11f9","\u1200"-"\u1206",
+    "\u1208"-"\u1246","\u1248","\u124a"-"\u124d","\u1250"-"\u1256",
+    "\u1258","\u125a"-"\u125d","\u1260"-"\u1286","\u1288","\u128a"-"\u128d",
+    "\u1290"-"\u12ae","\u12b0","\u12b2"-"\u12b5","\u12b8"-"\u12be",
+    "\u12c0","\u12c2"-"\u12c5","\u12c8"-"\u12ce","\u12d0"-"\u12d6",
+    "\u12d8"-"\u12ee","\u12f0"-"\u130e","\u1310","\u1312"-"\u1315",
+    "\u1318"-"\u131e","\u1320"-"\u1346","\u1348"-"\u135a","\u1369"-"\u1371",
+    "\u13a0"-"\u13f4","\u1401"-"\u166c","\u166f"-"\u1676","\u1681"-"\u169a",
+    "\u16a0"-"\u16ea","\u1780"-"\u17d3","\u17db","\u17e0"-"\u17e9",
+    "\u180b"-"\u180e","\u1810"-"\u1819","\u1820"-"\u1877","\u1880"-"\u18a9",
+    "\u1e00"-"\u1e9b","\u1ea0"-"\u1ef9","\u1f00"-"\u1f15","\u1f18"-"\u1f1d",
+    "\u1f20"-"\u1f45","\u1f48"-"\u1f4d","\u1f50"-"\u1f57","\u1f59",
+    "\u1f5b","\u1f5d","\u1f5f"-"\u1f7d","\u1f80"-"\u1fb4","\u1fb6"-"\u1fbc",
+    "\u1fbe","\u1fc2"-"\u1fc4","\u1fc6"-"\u1fcc","\u1fd0"-"\u1fd3",
+    "\u1fd6"-"\u1fdb","\u1fe0"-"\u1fec","\u1ff2"-"\u1ff4","\u1ff6"-"\u1ffc",
+    "\u200c"-"\u200f","\u202a"-"\u202e","\u203f"-"\u2040","\u206a"-"\u206f",
+    "\u207f","\u20a0"-"\u20af","\u20d0"-"\u20dc","\u20e1","\u2102","\u2107",
+    "\u210a"-"\u2113","\u2115","\u2119"-"\u211d","\u2124","\u2126","\u2128",
+    "\u212a"-"\u212d","\u212f"-"\u2131","\u2133"-"\u2139","\u2160"-"\u2183",
+    "\u3005"-"\u3007","\u3021"-"\u302f","\u3031"-"\u3035","\u3038"-"\u303a",
+    "\u3041"-"\u3094","\u3099"-"\u309a","\u309d"-"\u309e","\u30a1"-"\u30fe",
+    "\u3105"-"\u312c","\u3131"-"\u318e","\u31a0"-"\u31b7","\u3400"-"\u4db5",
+    "\u4e00"-"\u9fa5","\ua000"-"\ua48c","\uac00"-"\ud7a3","\uf900"-"\ufa2d",
+    "\ufb00"-"\ufb06","\ufb13"-"\ufb17","\ufb1d"-"\ufb28","\ufb2a"-"\ufb36",
+    "\ufb38"-"\ufb3c","\ufb3e","\ufb40"-"\ufb41","\ufb43"-"\ufb44",
+    "\ufb46"-"\ufbb1","\ufbd3"-"\ufd3d","\ufd50"-"\ufd8f","\ufd92"-"\ufdc7",
+    "\ufdf0"-"\ufdfb","\ufe20"-"\ufe23","\ufe33"-"\ufe34","\ufe4d"-"\ufe4f",
+    "\ufe69","\ufe70"-"\ufe72","\ufe74","\ufe76"-"\ufefc","\ufeff",
+    "\uff04","\uff10"-"\uff19","\uff21"-"\uff3a","\uff3f","\uff41"-"\uff5a",
+    "\uff65"-"\uffbe","\uffc2"-"\uffc7","\uffca"-"\uffcf","\uffd2"-"\uffd7",
+    "\uffda"-"\uffdc","\uffe0"-"\uffe1","\uffe5"-"\uffe6","\ufff9"-"\ufffb"
+    ]
+  >
+}
+
+/* SEPARATORS */
+
+TOKEN :
+{
+  < LPAREN:   "(" >
+| < RPAREN:   ")" >
+| < LBRACE:   "{" >
+| < RBRACE:   "}" >
+| < LBRACKET: "[" >
+| < RBRACKET: "]" >
+| < SEMICOLON:";" >
+| < COMMA:    "," >
+| < DOT:      "." >
+| < COLON:    ":" >
+
+}
+
+/* OPERATORS */
+
+TOKEN :
+{
+  < ASSIGN:  "="   >
+| < GT:      ">"   >
+| < LT:      "<"   >
+| < BANG:    "!"   >
+| < TIC:     "`"   >
+| < TILDE:   "~"   >
+| < HOOK:    "?"   >
+| < AT:      "@"   >
+| < DOLLAR:  "$"   >
+| < EQ:      "=="  >
+| < LE:      "<="  >
+| < GE:      ">="  >
+| < NE:      "!="  >
+| < OR:      "||"  >
+| < AND:     "&&"  >
+| < INC:     "++"  >
+| < DEC:     "--"  >
+| < PLUS:    "+"   >
+| < MINUS:   "-"   >
+| < STAR:    "*"   >
+| < SLASH:   "/"   >
+| < BIT_AND: "&"   >
+| < BIT_OR:  "|"   >
+| < XOR:     "^"   >
+| < POW:     "**"  >
+| < REM:     "%"   >
+| < LSHIFT:  "<<"  >
+| < RSHIFT:  ">>"  >
+| < ISGLOB:  "??"  >
+| < SIZEOF:  "%%"  >
+| < ATRANGE: "::"  >
+| < ATIMAGE: "?:"  >
+| < ATCLEAR: "!!"  >
+
+}
+
+/**********************************************************
+           The Boz Language Grammar
+***********************************************************/
+
+//START ::= UNIT
+void Start() :
+{
+    String code = null;
+}
+{
+    Unit()
+    <EOF>
+}
+
+//UNIT ::= (CLASS)
+void Unit() : 
+{}
+{
+    ( Class() )
+}
+
+//CLASS ::= "class" NAME [SUPERS] ":" [BODY] [ ":" BLOCK ] "."
+void Class() :
+{
+    String body   = null;
+    Name   name   = null;
+    String supers = null;
+    Token  tok    = null;
+    String block  = null;
+}
+{
+    "class"
+    { unitClassFlag = true;       }
+
+    name = Name()
+    { addUnitName(name);          }
+
+    [
+        supers = Supers()
+        { codeSuper = supers;     }
+    ]
+
+    ":"
+    [
+        body = Body()
+    ]
+
+    [    
+        tok   = ":"
+        { unitClassFlag = false;       }
+        
+        { tryCtx.start();              }
+        block = Block(tok.beginLine)
+        { tryCtx.close();              }
+    ]
+
+    {
+        if(unitClassFlag)
+        { 
+            addUnitCode(body);      
+        }
+        else
+        { 
+            addUnitCode(body, block);     
+        }
+    }
+
+    "."
+}
+
+//SUPERS ::= ( "<" NAME "=" ID )+
+String Supers() :
+{
+    String id   = null;
+    Name   name = null;
+    Code   code = new Code();
+
+    OrderedVector types  = new OrderedVector();
+    OrderedVector supers = new OrderedVector();
+    Token         tok    = null;
+}
+{
+    (
+    tok  = "<"
+    name = Name()
+    {
+        if(unitName.compareTo(name)==0)
+        {
+            error("#01 - Duplicate class name - class cannot inherit itself;"
+                 +" class name '"+name.toString()
+                 +"' in super-class list on line "+tok.beginLine
+                 +" at position "+tok.beginColumn+".");
+        }
+
+        if(types.has(name))
+        {
+            error("#02 - Duplicate super-class name '"+name.toString()
+                 +"' in super-class list on line"
+                 +tok.beginLine+" at position "+tok.beginColumn+".");
+        }
+        else
+        {
+            types.add(name);
+            addType(name);
+        }
+    }
+
+    tok = "="
+    id = Id()
+    {
+        if(supers.has(id))
+        {
+            error("#03 - Duplicate super-class id '"+id
+                 +"' alias in super-class list on line "
+                 +tok.beginLine+" at position "+tok.beginColumn+".");
+        }
+        else
+        {
+            supers.add(id);
+            iattrMap.add(id+"_");
+            superList.add(id+"_");
+        }
+    }
+    {
+        code.add("private final IHandle ");
+        code.add(id+"_ = new ");
+        code.add(name.toString());
+        code.add("();");
+        code.eol();
+    }
+    )+
+    {
+        return code.toString();
+    }
+}
+
+//BODY ::= ( IMETHOD | IATTRIBUTE | SATTRIBUTE | SMETHOD )+
+String Body() :
+{
+    Code   code = new Code();
+    String src  = null;
+}
+{
+    (
+    src = IMethod()
+    { code.cat(src);           }
+    |
+    src = IAttribute()
+    { code.cat(src);           }
+    |
+    src = SAttribute()
+    { code.cat(src);           }
+    |
+    src = SMethod()
+    { code.cat(src);           }
+
+    )+
+    { return code.toString();  }
+}
+
+//IATTRIBUTE ::= "~" ID "=" (EXPR|GLOB) ";"
+String IAttribute() :
+{
+    String id   = null;
+    String expr = null;
+    Code   code = new Code();
+    Token  tok  = null;
+}
+{
+    "~"
+    { code.add("public final IHandle ");   }
+
+    tok = IdTok()
+    { code.add(tok.image+"_");             }
+
+    {   
+        if(iattrMap.has(tok.image+"_") || sattrMap.has(tok.image+"_"))
+            error("#04 - Duplicate instance attribute '"+tok.image
+                 +"' on line "+tok.beginLine+" at position "+tok.beginColumn
+                 +" in attribute declaration.");
+        else
+            iattrMap.add(tok.image+"_");
+    }
+
+    "="
+    { code.add(" = ");         
+      code.add("RT.obj(");     }
+
+    (LOOKAHEAD(3)
+    expr = Expr()
+    |
+    expr = Glob()
+    )
+    { code.add(expr);          }
+
+    ";"
+    { code.cat(");");          }
+    { return code.toString();  }
+}
+
+//SATTRIBUTE ::= "-" ID "=" (EXPR | GLOB) ";"
+String SAttribute() :
+{
+    String id   = null;
+    String expr = null;
+    Code   code = new Code();
+    Token  tok  = null;
+}
+{
+    "-"
+    {
+        staticCtxFlag = true;
+        code.add("public final static IHandle ");
+    }
+
+    tok = IdTok()
+    { code.add(tok.image+"_");                }
+
+    {
+        if(iattrMap.has(tok.image+"_") || sattrMap.has(tok.image+"_"))
+            error("#05 - Duplicate static attribute '"+tok.image+"' on line "
+                 +tok.beginLine+" at position "+tok.beginColumn
+                 +" in attribute declaration.");
+        else
+            sattrMap.add(tok.image+"_");
+    }
+
+    "="
+    { code.add(" = ");         }
+    { code.add("RT.obj(");     }
+
+    (LOOKAHEAD(3)
+    expr = Expr()
+    |
+    expr = Glob()
+    )
+    { code.add(expr);          }
+
+    ";"
+    {
+        code.cat(");");
+        staticCtxFlag = false;
+        return code.toString();
+    }
+}
+
+//IMETHOD ::= "!" ID [ "@" ID | IDLIST ] ":" BLOCK "."
+String IMethod() :
+{
+    boolean  fixedParamFlag = true;
+    String   param          = null;
+
+    Code     code  = new Code();
+    String   key   = null;
+    String[] args  = new String[0];
+    String   block = null;
+    Token    tok   = null;
+}
+{
+    tok = "!"
+    {   tryCtx.start(); }
+    key  = Id()
+    {
+        localVar.begin();
+        localVar.add(key);
+        //name mangle name with suffix underscore
+        code.add("public final void "+key+"_(");
+    }
+    [
+        "@"
+        { fixedParamFlag = false; }
+
+        param = Id()
+        {
+            if(imthdList.has(key) || smthdList.has(key))
+            {
+                error("#06 - Duplicate variable parameter "
+                     +"instance method '"+key+"' re-declared on line: "
+                     +tok.beginLine+" at position "+tok.beginColumn
+                     +" in method declaration.");
+            }
+            else
+            {
+                imthdList.add(key);
+                if(localVar.has(param))
+                    error("#07 - Duplicate identifier: "+param
+                         +" parameter identifier already declared "
+                         +"in method '"+key+"' on line: "
+                         +tok.beginLine+" at position "
+                         +tok.beginColumn+" in method declaration.");
+                else
+                    localVar.add(param);
+                    code.add("IHandle[] "+VAR_ARG_ID);
+            }
+        }
+        |
+        args = IdList()
+        {
+            fixedParamFlag = true;
+            for(int x=0;x<args.length;x++)
+                if(localVar.has(args[x]))
+                    error("#07 - Duplicate identifier: "+args[x]
+                         +" parameter identifier already declared "
+                         +"in method '"+key+"' on line: "
+                         +tok.beginLine+" at position "
+                         +tok.beginColumn+" in method declaration.");
+                else
+                    localVar.add(args[x]);
+
+            if(args.length >= MAX_PARAMS)
+                error("#08 - Constraint for instance Method '"+key
+                     +"' exceeds maximum number of "+(MAX_PARAMS-1)
+                     +"-parameters with "+args.length+" on line: "
+                     +tok.beginLine+" at position "+tok.beginColumn+".");
+            else
+            {
+                for(int x=0;x<args.length-1;x++)
+                    code.add("IHandle "+args[x]+",");
+                code.add("IHandle "+args[args.length-1]);
+            }
+        }
+    ]
+    {
+        if(fixedParamFlag)
+        {
+            if(hasIMethod(key,args.length) || hasSMethod(key,args.length))
+                error("#09 - Duplicate instance method '"+key+"' with "
+                     +args.length+"-parameters re-declared on line: "
+                     +tok.beginLine+" at position "+tok.beginColumn
+                     +" in method declaration.");
+            else
+                addIMethod(key,args.length);
+        }
+        else
+        {
+            imthdList.add(key);
+        }//end if
+    }
+    {
+        code.cat("){");
+        code.eol();
+        //code to convert IHandle[] to glob data structure
+        if(!fixedParamFlag)
+        {
+            code.cat("IHandle "+param+" = RT.obj(RT.glob("+VAR_ARG_ID+"));");
+        }//end if
+    }
+
+    tok = ":"
+
+    block = Block(tok.beginLine)
+    { code.add(block); }
+
+    "."
+    { tryCtx.close();  }
+    {
+        code.cat("}");
+        localVar.close();
+        return code.toString();
+    }
+}
+
+//SMETHOD ::= "+" ID [ "@" ID | IDLIST ] ":" BLOCK "."
+String SMethod() :
+{
+    boolean  fixedParamFlag = true;
+    String   param          = null;
+
+    Code     code  = new Code();
+    String   key   = null;
+    String[] args  = new String[0];
+    String   block = null;
+    Token    tok   = null;
+}
+{
+    tok = "+"
+    { tryCtx.start();          }
+    { staticCtxFlag = true;    }
+
+    key  = Id()
+    {
+        localVar.begin();
+        localVar.add(key);
+
+        //name mangle name with suffix underscore
+        code.add("public final static void "+key+"_(");
+    }
+    [
+        "@"
+        { fixedParamFlag = false;  }
+
+        param = Id()
+        {
+            if(smthdList.has(key) || imthdList.has(key))
+            {
+                error("#10 - Duplicate variable parameter static method '"
+                     +key+"' re-declared on line: "+tok.beginLine
+                     +" at position "+tok.beginColumn
+                     +" in method declaration.");
+            }
+            else
+            {
+                smthdList.add(key);
+                if(localVar.has(param))
+                    error("#11 - Duplicate identifier: "+param+" parameter "
+                         +"identifier already declared in method '"
+                         +key+"' on line: "+tok.beginLine+" at position "
+                         +tok.beginColumn+" in method declaration.");
+                else
+                    localVar.add(param);
+                code.add("IHandle[] "+VAR_ARG_ID);
+            }
+        }
+    |
+    args = IdList()
+    {   fixedParamFlag = true;
+        for(int x=0;x<args.length;x++)
+            if(localVar.has(args[x]))
+                error("#11 - Duplicate identifier: "+args[x]
+                     +" parameter identifier already declared in method '"
+                     +key+"' on line: "+tok.beginLine+" at position "
+                     +tok.beginColumn+" in method declaration.");
+            else
+                localVar.add(args[x]);
+
+        if(args.length >= MAX_PARAMS)
+            error("#12 - Constraint for static Method '"+key
+                 +"' exceeds maximum number of "+(MAX_PARAMS-1)
+                 +"-parameters with "+args.length+" on line: "+tok.beginLine
+                 +" at position "+tok.beginColumn+".");
+        else
+        {
+            for(int x=0;x<args.length-1;x++)
+                code.add("IHandle "+args[x]+",");
+            code.add("IHandle "+args[args.length-1]);
+        }
+    }
+    ]
+    {
+        if(fixedParamFlag)
+        {
+            if(hasSMethod(key,args.length) || hasIMethod(key, args.length))
+                error("#13 - Duplicate static method '"+key+"' with "
+                     +args.length+"-parameters re-declared on line: "
+                     +tok.beginLine+" at position "+tok.beginColumn
+                     +" in method declaration.");
+            else
+                addSMethod(key,args.length);
+        }
+        else
+        {
+            smthdList.add(key);
+        }//end if
+    }
+    {
+        code.cat("){");
+        code.eol();
+
+        //code to convert IHandle[] to glob data structure
+        if(!fixedParamFlag)
+        {
+            code.cat("IHandle "+param+" = RT.obj(RT.glob("+VAR_ARG_ID+"));");
+        }//end if
+    }
+    tok = ":"
+    block = Block(tok.beginLine)
+    { code.add(block); }
+
+    "."
+    { tryCtx.close(); }
+    {
+        code.cat("}");
+        localVar.close();
+        staticCtxFlag = false;
+        return code.toString();
+    }
+}
+
+//STATEMENT ::= ( ASSIGN|STREAM|DECLARE|DO|JUMP|NOP|RETURN|SNAP|IF|TRY )
+String Statement() :
+{
+    String stmt = null;
+    Code   code = new Code();
+}
+{
+    (LOOKAHEAD(4)
+    stmt = Assign()
+    { code.add(stmt); code.eol();  }
+    |
+    stmt = Declare()
+    { code.add(stmt); code.eol();  }
+    |
+    stmt = StatementDo()
+    { code.add(stmt); code.eol();  }
+    |
+    stmt = StatementJump()
+    { code.add(stmt); code.eol();  }
+    |
+    stmt = StatementNop()
+    { code.add(stmt); code.eol();  }
+    |
+    stmt = StatementReturn()
+    { code.add(stmt); code.eol();  }
+    |
+    stmt = StatementSnap()
+    { code.add(stmt); code.eol();  }
+    |
+    stmt = StatementIf()
+    { code.add(stmt); code.eol();  }
+    |
+    stmt = StatementTry()
+    { code.add(stmt); code.eol();  }
+    )
+    { return code.toString();      }
+}
+
+//BLOCK ::= ( STATEMENT )+
+String Block(final int line) :
+{
+    Code   code = new Code();
+    String stmt = null;
+}
+{
+    { blkCtx.start(); }
+    {
+        localVar.begin();
+        if(localVar.getDepth() > MAX_SCOPE)
+        error("#14 - Constraint for scope depth of block exceeds maximum of "
+             +MAX_SCOPE+" on line: "+line+".");
+    }
+    (LOOKAHEAD(3)
+       stmt = Statement()
+       { code.add(stmt);       }
+    )+
+    { blkCtx.close();  }
+    { localVar.close();
+      return code.toString();  }
+}
+
+//DO ::= "do" [ID ("=" EXPR "," EXPR "," EXPR | ":" EXPR) | EXPR] ":" BLOCK "."
+String StatementDo() :
+{
+    String block = null;
+    Code   code  = new Code();
+    
+    String prefix = "";
+    String ctrl   = "";
+    String next   = "";
+    String init   = "";
+
+    String expr = null;
+
+    String id  = null;
+    String var = null;
+    Token  tok = null;
+}
+{
+    tok = "do"
+    {
+        if(checkCtx())
+        {
+            error("#29 - Context of do statement on line "+tok.beginLine
+                 +" at position "+tok.beginColumn
+                 +" is unreachable with the block of statements.");
+        }
+    }
+
+    { doCounter++;     }
+    { 
+      doCtx.start();   
+      doCtx.setTrue();
+      label.start();
+    }
+    [
+        LOOKAHEAD(2)
+        tok = IdTok()
+        { id  = tok.image;  }
+        {
+          if(localVar.has(id))
+            error("#28 - Duplicate variable id '"+id+"' on line "
+                 +tok.beginLine+" at position "+tok.beginColumn
+                 +" in do statement already exists.");
+          else
+            localVar.add(id);
+        }
+        (
+            { doCtx.setFalse(); }
+            "="
+            expr = Expr()
+            { 
+                init = "IHandle "+id+" = RT.obj("+expr+")";
+            }
+            ","
+            expr = Expr()
+            { ctrl = "RT.boolExpr("+expr+")";      }
+            ","
+            expr = Expr()
+            { next = "RT.assign("+id+","+expr+")"; }
+        |
+            { doCtx.setFalse(); }
+            ":"
+            { var = uniqueIntVar();                       }
+            expr = Expr()
+            { prefix = "int "+var+" = 0;"; }
+            { init = "IHandle "+id+" = RT.obj(RT.nil())"; }
+            { ctrl = var+" < ("+expr+")._size()";                   }
+            { next = "RT.assign("+id+", ("+expr+")._of("+var+"++))";}           
+        )
+        |
+            { doCtx.setFalse(); }
+            expr = Expr()
+            { ctrl = "RT.boolExpr("+expr+")";              }
+    ]
+
+    tok = ":"
+    block = Block(tok.beginLine)
+    "."
+    { doCounter--; }
+    { 
+        if(doCtx.flag())
+        {
+            blkCtx.setTrue();
+        }
+      
+        doCtx.close(); 
+    }
+    {
+        if(id != null)
+            localVar.drop(id);
+    }
+    {
+        code.add(prefix);
+        code.eol();
+        
+        code.add(label.getLabelLoop());
+        
+        code.add("for( ");
+        
+        code.add(init);
+        code.add(";");
+        code.add(ctrl);
+        code.add(";");
+        code.add(next);
+        
+        code.add("){");
+        code.eol();
+        
+        code.add(block);
+        code.add("}");
+        code.eol();
+        
+        label.close();
+        
+        return code.toString();
+    }
+}
+
+//IF ::= "if" EXPR ":" BLOCK ( "ef" EXPR ":" BLOCK )* "else" BLOCK "."
+String StatementIf() :
+{
+    String expr = null;
+    String block= null;
+    Code   code = new Code();
+    Token  tok  = null;
+}
+{
+    tok = "if"
+    {
+        if(checkCtx())
+        {
+            error("#29 - Context of if statement on line "+tok.beginLine
+                 +" at position "+tok.beginColumn
+                 +" is unreachable with the block of statements.");
+        }
+    }
+
+    { code.add("if( RT.boolExpr(");}
+
+    expr = Expr()
+    { code.add(expr);                }
+
+    tok = ":"
+    { code.add(") ){");              }
+
+    block = Block(tok.beginLine)
+    { code.add(block);               }
+
+    (
+        "ef"
+        {   code.add("} else ");
+            code.add("if( RT.boolExpr(");
+        }
+
+        expr = Expr()
+        { code.add(expr);                }
+
+        tok = ":"
+        { code.add(") ){");              }
+
+        block = Block(tok.beginLine)
+        { code.add(block);               }
+    )*
+    [
+        tok = "else"
+        { code.add("} else {");          }
+
+        block = Block(tok.beginLine)
+        { code.add(block);               }
+    ]
+    "."
+    {
+        code.add("}");
+        return code.toString();
+    }
+}
+
+//TRY ::= "try" BLOCK "on" BLOCK [ "do" BLOCK ] "."
+String StatementTry() :
+{
+    Code   code  = new Code();
+    String block = null;
+    String lit   = null;
+    Token  tok   = null;
+}
+{
+    tok = "try"
+    { tryCtx.start();                    }
+    {
+        if(checkCtx())
+        {
+            error("#29 - Context of try statement on line "+tok.beginLine
+                 +" at position "+tok.beginColumn
+                 +" is unreachable with the block of statements.");
+        }
+    }
+
+    { code.cat("try {");                 }
+
+    block = Block(tok.beginLine)
+    { tryCtx.close();                    }
+    { code.add(block);                   }
+    { code.cat("} catch(BozTrap _bt){"); }
+    { code.cat("this._myTrap = _bt;  "); }
+  
+    tok = "on"
+    block = Block(tok.beginLine)
+    { code.add(block);                   }
+    { code.add("}");                     }
+  
+    [
+       tok = "do"
+       { tryDoCounter++; }
+       { code.add("finally {");          }
+
+       block = Block(tok.beginLine)
+       { code.add(block);                }
+       { code.add("}");                  }
+       { tryDoCounter--;                 }
+    ]
+    "."
+    { tryCounter--;                      }
+    { return code.toString();            }
+}
+
+//JUMP ::= ("cut" | "end") [INTEGER] ";"
+String StatementJump() :
+{
+    Code    code = new Code();
+    Token   tok  = null;
+    Token   semi = null;
+    
+    boolean cutFlag = false;
+    boolean endFlag = false;
+}
+{
+    (
+        tok = "cut"
+        { cutFlag = true;    }
+    |
+        tok = "end"
+        { endFlag = true;    }
+        { doCtx.setFalse();  }
+       
+    )
+    
+    [
+        tok = <INTEGER_LITERAL>
+        {
+            final int depth = Integer.parseInt(tok.image, 10); //use intValue??
+        
+            if(depth >= MAX_SCOPE)
+            {
+				error("#36 - Constraint for jump statement depth of "+tok.image	
+					 +" on line "+tok.beginLine                           	 
+					 +" at position "+tok.beginColumn	
+					 +" exceeds the maximum depth of "
+                                         +MAX_SCOPE+".");	
+                
+            }
+            else
+            if(depth >= label.size())
+            {
+				error("#37 - Jump depth of "+tok.image	
+					 +" on line "+tok.beginLine                           	 
+					 +" at position "+tok.beginColumn	
+					 +" exceeds the current depth of "
+                                         +label.size()+".");                     
+            
+            }
+            else
+            {
+                if(cutFlag) label.cut(depth);
+                if(endFlag) label.end(depth);
+            }//end if
+        }
+    ]
+
+    semi = ";"
+    {
+        if(checkCtx())
+        {
+            error("#29 - Context of jump statement on line "+semi.beginLine
+                 +" at position "+semi.beginColumn
+                 +" is unreachable with the block of statements.");
+        }
+    }
+    {
+        if(doCounter == 0)
+            error("#16 - Context of jump statement "+tok.image+" on line "
+                 +tok.beginLine+" at position "+tok.beginColumn
+                 +" is not within a do-statement.");
+
+        if(tryDoCounter > 0)
+            error("#17 - Context of jump statement "+tok.image+" on line "
+                 +tok.beginLine+" at position "+tok.beginColumn
+                 +" is within the do-block of a try statement.");
+    }
+    { if(cutFlag) blkCtx.setTrue(); }
+
+    {
+        if(cutFlag)
+        {
+           code.add("continue ");
+           code.add(label.getLabelCut());
+          
+        }
+        else
+        if(endFlag)
+        {
+           code.add("break ");
+           code.add(label.getLabelEnd());
+        
+        }//end if
+    
+        code.add(";");
+        code.eol();
+    }
+    
+    { return code.toString();    }
+}
+
+//NULL ::= ";"
+String StatementNop() :
+{
+    Code code = new Code();
+    Token semi = null;
+}
+{
+    semi = ";"
+    {
+        if(checkCtx())
+        {
+            error("#29 - Context of nop statement on line "+semi.beginLine
+                 +" at position "+semi.beginColumn
+                 +" is unreachable with the block of statements.");
+        }
+    }
+    {
+        code.cat("RT.Nop();");
+        code.eol();
+        return code.toString();
+    }
+}
+
+//SNAP ::= "snap" [ STRING_LIT "," STRING_LIT ] ";"
+String StatementSnap() :
+{
+    String  trap = "";
+    String  cntx = "";
+    Code    code = new Code();
+    Token   semi = null;
+    boolean flag = true; 
+}
+{
+    "snap"
+    { code.add("throw RT.snap( ");         }
+
+    [   
+        {  flag = false; }
+        trap = LiteralString()
+        ","
+        cntx = LiteralString() 
+    ]
+
+    {
+        if(flag)
+        {
+            code.add("this._myTrap");
+        }
+        else
+        {
+            code.add("RT.lit("+trap+")");   
+            code.add(" , ");                
+            code.add("RT.lit("+cntx+")");   
+        }
+    }
+    
+    { code.add(" );");                     }
+    
+    semi = ";"
+    {
+        if(checkCtx())
+        {
+            error("#29 - Context of snap statement on line "+semi.beginLine
+                 +" at position "+semi.beginColumn
+                 +" is unreachable with the block of statements.");
+        }
+    }
+
+    { doCtx.setFalse();      }
+    { blkCtx.setTrue();      }
+    { tryCtx.setTrue();      }
+    { return code.toString();}
+}
+
+//RETURN ::=  ( "done" | "=" EXPR ) ";"
+String StatementReturn() :
+{
+    String expr = null;
+    Code   code = new Code();
+    Token  tok  = null;
+    Token  semi = null;
+}
+{
+    (
+        tok = <ASSIGN>
+        expr = Expr()
+        {
+            if(staticCtxFlag)
+            {
+                code.add(unitName.toString());
+                code.add("._sret( "+expr+");");
+            }
+            else
+                code.add("RT.assign( this, "+expr+" ); ");
+
+        }
+    |
+        tok = <DONE>
+        {
+            if(staticCtxFlag)
+            {
+                code.add(unitName.toString());
+                code.add("._sret( RT.nil() );");
+            }
+            else
+                code.add("RT.assign( this, RT.nil() ); ");
+
+        }
+    )
+    semi = ";"
+    {
+        if(checkCtx())
+        {
+            error("#29 - Context of return statement on line "+semi.beginLine
+                     +" at position "+semi.beginColumn
+                     +" is unreachable with the block of statements.");
+        }
+    }
+    { doCtx.setFalse(); }
+    {
+        if(tryDoCounter > 0)
+            error("#18 - Context of return statement on line "+tok.beginLine
+                 +" at position "+tok.beginColumn
+                 +" is within the do-block of a try statement.");
+    }
+
+    { code.add("return;");                       }
+    { blkCtx.setTrue();                          }
+    { return code.toString();                    }
+}
+
+//DECLARE ::= "%" ID "=" ( EXPR | GLOB ) ";"
+String Declare() :
+{
+    String id   = null;
+    String expr = null;
+    Code   code = new Code();
+    Token  tok  = null;
+    Token  semi = null;
+}
+{
+    "%"
+    { code.add("IHandle ");    }
+
+    tok = IdTok()
+    { code.add(tok.image);     }
+    {
+        isDeclareFlag = true;
+        declareVar    = tok.image;
+    }
+
+    {
+        if(localVar.has(tok.image))
+            error("#19 - Duplicate variable id '"+tok.image+"' on line "
+                 +tok.beginLine+" at position "+tok.beginColumn
+                 +" in declaration.");
+        else
+            localVar.add(tok.image);
+    }
+
+    "="
+    { code.add(" = ");         }
+    { code.add("RT.obj(");     }
+
+    (LOOKAHEAD(3)
+        expr = Expr()
+        |
+        expr = Glob()
+    )
+    { code.add(expr);          }
+
+    semi = ";"
+    {
+        if(checkCtx())
+        {
+            error("#29 - Context of declaration on line "+semi.beginLine
+                 +" at position "+semi.beginColumn
+                 +" is unreachable with the block of statements.");
+        }
+    }
+    {
+        declareVar    = null;
+        isDeclareFlag = false;
+    }
+    { code.add(");");          }
+    { return code.toString();  }
+}
+
+//ASSIGN ::= POSTFIX [ "=" ( EXPR | GLOB ) ] ";"
+String Assign() :
+{
+    String pfix = null;
+    String expr = null;
+    Code   code = new Code();
+    Token  tok  = null;
+}
+{
+    pfix = Postfix()
+    {
+        code.add(pfix);
+    }
+    [
+        tok = "="
+    {
+        if(checkCtx())
+        {
+            error("#29 - Context of assignment statement on line "
+                 +tok.beginLine+" at position "+tok.beginColumn
+                     +" is unreachable with the block of statements.");
+        }
+    }
+
+        { code.prefix("RT.assign(");   }
+        (LOOKAHEAD(3)
+        expr = Expr()
+        |
+        expr = Glob()
+        )
+        { code.suffix(","+expr+")");   }
+    ]
+
+    ";"
+
+    { code.add(";");           }
+    { return code.toString();  }
+}
+
+//GLOB ::= "<" [ GLOBIMAGE | GLOBRANGE ] ">"
+String Glob() :
+{
+    Code    code = new Code();
+    boolean flag = false;
+    String  glob = "RT.Glob();";
+}
+{
+    "<"
+    
+    [LOOKAHEAD(4)   
+        glob = GlobImage()    //RT.GlobImage("new IHandle[]{"+glob+"}");        
+        { 
+            flag = true;
+            code.add("RT.GlobImage"); 
+        }
+    |
+        glob = GlobRange()    //RT.GlobRange("new IHandle[]{"+glob+"}");
+        {    
+            flag  = true;
+            code.add("RT.GlobRange"); 
+        }
+    ]
+    
+    ">"
+    
+    {
+         if(flag)
+         {
+             code.add("( new IHandle[]{ ");
+             code.add(glob);
+             code.add(" } );");
+             //RT.GlobXXX(new IHandle[]{ <expr,expr...expr,expr> });
+         }
+         else
+         {
+             code.add("RT.Glob();");
+         }
+         code.eol();
+         return code.toString();
+    }
+    
+}//end Glob
+
+//GLOBIMAGE ::= "[" EXPR ("," EXPR)* "]"
+String GlobImage() :
+{
+    Code   code  = new Code();
+    int    count = 1;
+    String expr  = null;
+    Token  tok   = null;
+}
+{
+    "["
+    expr = Expr()       { code.add(expr); }
+    (
+        tok = ","       {
+                            count++;
+                            if(count > MAX_GLOB_INIT) 
+                                error("#38 - Constraint for glob declaration"
+                                     +" exceeds maximum of "+(MAX_GLOB_INIT)
+                                     +" initial values for a glob on line: "
+                                     +tok.beginLine+" at position "
+                                     +tok.beginColumn+".");                  
+                        }
+        expr = Expr()   { 
+                             code.add(","); 
+                             code.add(expr); 
+                        } 
+    )*
+    "]"
+    {
+        return code.toString();
+    }
+
+}//end GlobImage
+
+//GLOBRANGE ::= "{" EXPR "=" EXPR ("," EXPR "=" EXPR )* "}"
+String GlobRange() :
+{
+    Code       code    = new Code();
+    int        count   = 1;
+    String     expr    = null;
+    OrderedVector globMap = new OrderedVector();
+    Token      tok     = null;
+}
+{
+    "{"
+    
+    expr = Expr()   {   
+                        globMap.add(expr); 
+                        code.add(expr); 
+                    }
+    "=" 
+    expr = Expr()   { 
+                        code.add(","); 
+                        code.add(expr);     
+                    }
+    
+    (
+        tok = ","   {
+						count++;
+						if(count > MAX_GLOB_INIT) 
+							error("#38 - Constraint for glob declaration"
+								 +" exceeds maximum of "+(MAX_GLOB_INIT)
+								 +" initial values for a glob on line: "
+								 +tok.beginLine+" at position "
+								 +tok.beginColumn+".");
+						code.add(",");
+                    }
+                  
+        expr = Expr()    
+					{ 
+						if(globMap.has(expr))
+							error("#24 - Duplicate glob image expression in "
+								 +"glob declaration on line "+tok.beginLine
+								 +" at position "+tok.beginColumn
+								 +" in attribute declaration.");                        
+						globMap.add(expr);
+						code.add(expr);
+					}
+        "="
+        expr = Expr()   
+					{ 
+						code.add(","); 
+						code.add(expr); 
+					}
+    )*
+    
+    "}"
+    
+    {
+        return code.toString();
+    }
+
+}//end GlobRange
+
+//GLOBCALL ::= "@" EXPR | ":" EXPR | "?" EXPR | "::" EXPR | "?:" EXPR | "!!" EXPR
+String GlobCall() :
+{
+   //String[0] => globcall function
+   //String[1] => expr or exprlist
+   Code   code = new Code();
+}
+{
+    ( 
+      "@"  Expr()   //String[0] = RT.AtNew, String[1] = ExprList() 
+    | 
+      ":"  Expr()   //String[0] = RT.AtGet
+    | 
+      "?"  Expr()   //String[0] = RT.AtHas
+    | 
+      "::" Expr()   //String[0] = RT.AtRange
+    | 
+      "?:" Expr()   //String[0] = RT.AtImage
+    |
+      "!!" Expr()   //String[0] = RT.AtClear
+    )
+    {   return code.toString(); }
+}
+
+//EXPR ::= LOGEXPR ( "||" LOGEXPR )*
+String Expr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "RT.ior(";
+}
+{
+    expr = LogExpr()         { code.add(expr);                 }
+    (LOOKAHEAD(2)
+        "||"
+        expr = LogExpr()     { code.concat(oper,","+expr+")"); }
+    )*
+                             { code.concat("RT.expr(",")");    }
+                             { return code.toString();         }
+}
+
+//LOGEXPR ::= INCEXPR ( "&&" INCEXPR )*
+String LogExpr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "RT.and(";
+}
+{
+    expr = IncExpr()         { code.add(expr);                 }
+    (LOOKAHEAD(2)
+        "&&"
+        expr = IncExpr()     { code.concat(oper,","+expr+")"); }
+    )*
+                             { return code.toString();         }
+}
+
+//INCEXPR ::= XOREXPR ( "|" XOREXPR )*
+String IncExpr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "RT.iorb(";
+}
+{
+    expr = XorExpr()         { code.add(expr);                 }
+    (LOOKAHEAD(2)
+        "|"
+        expr = XorExpr()     { code.concat(oper,","+expr+")"); }
+    )*
+                             { return code.toString();         }
+}
+
+//XOREXPR ::= ANDEXPR ( "^" ANDEXPR )*
+String XorExpr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "RT.xor(";
+}
+{
+    expr = AndExpr()         { code.add(expr);                 }
+    (LOOKAHEAD(2)
+        "^"
+        expr = AndExpr()     { code.concat(oper,","+expr+")"); }
+    )*
+                             { return code.toString();         }
+}
+
+//ANDEXPR ::= EQUEXPR ( "&" EQUEXPR )*
+String AndExpr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "RT.andb(";
+}
+{
+    expr = EquExpr()         { code.add(expr);                 }
+    (LOOKAHEAD(2)
+        "&"
+        expr = EquExpr()     { code.concat(oper,","+expr+")"); }
+    )*
+                             { return code.toString();         }
+}
+
+//EQUEXPR ::= RELEXPR ( ( "==" | "!=" ) RELEXPR )*
+String EquExpr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "";
+}
+{
+    expr = RelExpr()         { code.add(expr);                 }
+    (LOOKAHEAD(2)
+        (
+            "=="             { oper = "RT.eq(";                }
+        |
+            "!="             { oper = "RT.ne(";                }
+        )
+        expr = RelExpr()     { code.concat(oper,","+expr+")"); }
+    )*
+                             { return code.toString();         }
+}
+
+//RELEXPR ::= SHIFTEXPR ( ( "<" | ">" | "<=" | ">=" ) SHIFTEXPR )*
+String RelExpr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "";
+}
+{
+    expr = ShiftExpr()       { code.add(expr);                 }
+    (LOOKAHEAD(2)
+        (
+            "<"              { oper = "RT.lt(";                }
+        |
+            ">"              { oper = "RT.gt(";                }
+        |
+            "<="             { oper = "RT.le(";                }
+        |
+            ">="             { oper = "RT.ge(";                }
+        )
+        expr = ShiftExpr()   { code.concat(oper,","+expr+")"); }
+    )*
+                             { return code.toString();         }
+
+}
+
+//SHIFTEXPR ::= ADDEXPR ( ( "<<" | ">>" ) ADDEXPR )*
+String ShiftExpr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "";
+}
+{
+    expr = AddExpr()         { code.add(expr);                 }
+    (LOOKAHEAD(2)
+        (
+           "<<"              { oper = "RT.lsh(";               }
+        |
+           ">>"              { oper = "RT.rsh(";               }
+        )
+        expr = AddExpr()     { code.concat(oper,","+expr+")"); }
+    )*
+                             { return code.toString();         }
+
+}
+
+//ADDEXPR ::= MULEXPR ( ( "+" | "-" ) MULEXPR )*
+String AddExpr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "";
+}
+{
+    expr = MulExpr()        { code.add(expr);                  }
+    (LOOKAHEAD(2)
+        (
+            "+"             { oper = "RT.add(";                }
+        |
+            "-"             { oper = "RT.sub(";                }
+        )
+        expr = MulExpr()    { code.concat(oper,","+expr+")");  }
+    )*
+
+                            { return code.toString();          }
+}
+
+//MULEXPR ::= UNARYEXPR ( ( "*" | "%" | "/" | "**" ) UNARYEXPR )*
+String MulExpr() :
+{
+    String expr = null;
+    Code   code = new Code();
+    String oper = "";
+}
+{
+    expr = UnaryExpr()
+    { code.add(expr);                         }
+    (LOOKAHEAD(2)
+        (
+            "*"
+            { oper = "RT.mul(";               }
+        |
+            "%"
+            { oper = "RT.mod(";               }
+        |
+            "/"
+            { oper = "RT.div(";               }
+        |
+            "**"
+            { oper = "RT.pow(";               }
+        )
+        expr = UnaryExpr()
+        { code.concat(oper,","+expr+")"); }
+    )*
+    { return code.toString();                 }
+}
+
+//UNARYEXPR ::= [ "!" | "~" | "+" | "-" | "$" | "%" | "%%" | "??" ] POSTFIX
+String UnaryExpr() :
+{
+    String prefix   = null;
+    String suffix   = null;
+    String postfix  = null;
+    Code   code     = new Code();
+}
+{
+    [
+        "!"
+        {  prefix = "RT.not(";  suffix = ")";       }
+    |
+        "~"
+        {  prefix = "RT.comp("; suffix = ")";       }
+    |
+        "+"
+        {  prefix = "RT.pos(";  suffix = ")";       }
+    |
+        "-"
+        {  prefix = "RT.neg(";  suffix = ")";       }
+    |
+        "$"
+        {  prefix = "RT.str(";  suffix = ")";       }
+    |
+        "%"
+        {  prefix = "RT.val(";  suffix = ")";       }
+    |
+        "%%" //RT.SizeOf
+        {  prefix = "RT.SizeOf("; suffix = ")";     }
+    |
+        "??"  //RT.IsGlob
+        {  prefix = "RT.IsGlob("; suffix = ")";     }
+    ]
+    
+    postfix = Postfix()
+    { code.add(postfix);                               }
+    {
+        if(prefix != null) code.concat(prefix,suffix);
+    }
+    { return code.toString();                          }
+}
+
+//POSTFIX ::= ( PREDEFFUN | PRIMARY 
+//            ( ATTRIBUTECALL | GLOBCALL | METHODCALL )* 
+//            [ "++" | "--" ] )
+String Postfix() :
+{
+    Code   code    = new Code();
+    String primary = null;
+    String call    = null;
+}
+{
+    { staticExpFlag = false;           }
+    (
+        call    = PredefFunc()
+        { return call;                 }
+    |
+        primary = Primary()
+        { code.add(primary);           }
+
+        (LOOKAHEAD(2)
+            (
+              call = AttributeCall()
+              { code.suffix(call);     }
+            |
+              call = GlobCall()
+              { code.suffix(call);     }
+              call = MethodCall()
+              { code.suffix(call);     }
+            )
+        )*
+
+        [LOOKAHEAD(2)
+            (
+                "++"
+                { code.concat("RT.inc(",")");      }
+            |
+                "--"
+                { code.concat("RT.dec(",")");      }
+            )
+        ]
+    )
+   { return code.toString();          }
+}
+
+//PREDEFFUNC ::= ( FUNCARGS | FUNCDIE | FUNCECHO | FUNCEOL | FUNCEXIT | FUNCFALSE
+//               | FUNCNEW | FUNCSCAN | FUNCTRUE )
+String PredefFunc() :
+{
+    String func = null;
+}
+{
+    (
+
+        func = FuncArgs()
+    |
+        func = FuncDie()
+    |
+        func = FuncEcho()
+    |
+        func = FuncEol()
+    |
+        func = FuncExit()
+    |
+        func = FuncFalse()
+    |
+        func = FuncNew()
+    |
+        func = FuncScan()
+    |
+        func = FuncTrue()
+    )
+    { return func; }
+
+}
+
+//FUNCARGS ::= "args"
+String FuncArgs() :
+{}
+{
+    "args"
+    { return "RT.args()";  }
+}
+
+//FUNCCATCH ::= "catch"
+String FuncCatch() :
+{}
+{
+    "catch"
+    { return "RT.Catch(this._myTrap)";  }
+}
+
+//FUNCCAUSE ::= "cause"
+String FuncCause() :
+{}
+{
+    "cause"
+    { return "RT.Cause(this._myTrap)";  }
+}
+
+//FUNCDIE ::= "die" ":" EXPR
+String FuncDie() :
+{
+    String expr = null;
+}
+{
+    "die"
+    ":"
+    expr = Expr()
+    { return "RT.die("+expr+")"; }
+}
+
+//FUNCECHO ::= "echo" [ ":" EXPRLIST ]
+String FuncEcho() :
+{
+    Code   code = new Code();
+    String list = "";
+}
+{
+    "echo"
+    [LOOKAHEAD(2)
+        ":"
+        list = ExprList()   
+    ]
+    {
+        code.add("RT.Echo(");
+        code.add(" RT.box(");
+        code.add(list);
+        code.add(") )");
+        code.eol();
+	return code.toString();
+    }
+}
+
+//FUNCEOL ::= "eol"
+String FuncEol() :
+{}
+{
+    "eol"
+    { return "RT.Eol()";  }
+}
+
+//FUNCEXIT ::= "exit" ":" EXPR
+String FuncExit() :
+{
+    String expr = null;
+}
+{
+    "exit"
+    ":"
+    expr = Expr()
+    { doCtx.setFalse();           }
+    { blkCtx.setTrue();           }
+    { return "RT.exit("+expr+")"; }
+}
+
+//FUNCFALSE ::= "false"
+String FuncFalse() :
+{}
+{
+    "false"
+    { return "RT.False()";  }
+}
+
+//FUNCNEW ::= "new" ":" ( NAME "=" ID | ID )
+String FuncNew() :
+{
+    Code   code = new Code();
+    Name   name = null;
+    String id   = null;
+    Token  tok  = null;
+}
+{
+    "new"
+    { code.add("new ");     }
+    tok = ":"
+
+    (LOOKAHEAD(2)
+
+        name = Name()
+        {
+            if(unitName.compareTo(name)==0)
+            {
+                error("#26 - Illegal type alias for class; "
+                     +"use 'my' for instance class reference on line "
+                     +tok.beginLine+" at position "+tok.beginColumn+".");
+            }
+            else
+                addType(name);
+        }
+
+        "="
+        tok   = IdTok()
+        {
+            id = tok.image;
+
+            if(hasName(name))
+                error("#27 - Duplicate namespace '"+name
+                     +"' already has name alias; namespace is repeated; "
+                     +"at line: "+tok.beginLine+" position: "
+                     +tok.beginColumn+" to line: "+tok.endLine
+                     +" position: "+tok.endColumn+".");
+
+                    if(hasAlias(id))
+                        error("#20 - Duplicate type alias '"+id
+                             +"' is repeated; at line: "+tok.beginLine
+                             +" position: "+tok.beginColumn+" to line: "
+                             +tok.endLine+" position: "+tok.endColumn+".");
+                    else
+                        addAlias(id,name);
+
+            code.add(getAlias(id).toString());
+        }
+    |
+        tok   = IdTok()
+        {
+            id = tok.image;
+            if(!hasAlias(id))
+                error("#21 - Unknown type alias '"+id
+                     +"' is undeclared; at line: "+tok.beginLine
+                     +" position: "+tok.beginColumn+" to line: "
+                     +tok.endLine+" position: "+tok.endColumn+".");
+            else
+                code.add(getAlias(id).toString());
+        }
+    )
+    {
+        code.add("()");
+        return code.toString();
+    }
+}
+
+//FUNCSCAN ::= "scan" [ ":" EXPR ]
+String FuncScan() :
+{
+    Code   code = new Code();
+    String expr = "";
+}
+{
+    "scan"
+    [LOOKAHEAD(2)
+        ":"
+        expr = Expr()
+    ]
+    { 
+        code.add("RT.Scan(");
+        code.add(" RT.lit(");
+        code.add(expr); 
+        code.add(") )");
+        code.eol();
+	return code.toString();
+    }
+}
+
+//FUNCTRUE ::= "true"
+String FuncTrue() :
+{}
+{
+    "true"
+    { return "RT.True()";  }
+}
+
+//ATTRIBUTECALL ::= "`" ID
+String AttributeCall() :
+{
+    String id   = null;
+    Code   code = new Code();
+}
+{
+    "`"
+    {
+        if(staticExpFlag)
+        code.add("._sget(");
+        else
+        code.add("._iget(");
+    }
+    id = Id()
+    {
+        code.add("\""+id+"\")");
+        return code.toString();
+    }
+}
+
+//METHODCALL ::= "!" ID [ ":" EXPRLIST ]
+String MethodCall() :
+{
+    String expr = null;
+    String id   = null;
+    Code   code = new Code();
+}
+{
+    "!"
+    id = Id()
+    {
+    if(staticExpFlag)
+        code.add("._scall");
+    else
+        code.add("._icall");
+
+    code.add("(\""+id+"\",");
+    code.add("RT.box(");
+    }
+    [LOOKAHEAD(2)
+        ":"
+        expr = ExprList()
+        {   code.add(expr);  }
+    ]
+    {
+    code.add("))");
+    return code.toString();
+    }
+
+}
+
+//PRIMARY ::= ( ID| "@" NAME "=" ID|"it"|"my"|"nil"|LIT|"(" EXPR ")" )
+String Primary() :
+{
+    String expr   = null;
+    Token  tok    = null;
+    Name   name   = null;
+}
+{
+    (LOOKAHEAD(3)
+        tok = IdTok()
+        {
+            if(isDeclareFlag)
+            { 
+                if(declareVar.equals(tok.image))
+                {
+                    error("#35 - Context of variable "+tok.image
+                         +" declaration on line "+tok.beginLine                           
+                         +" at position "+tok.beginColumn
+                         +" is an uninitialized self-reference.");
+                }
+            }
+
+            if(localVar.has(tok.image))
+            {
+                return tok.image;
+            }
+            else if(typeAlias.has(tok.image))
+            {
+                staticExpFlag = true;
+                return getAlias(tok.image).toString();
+            }
+            else
+            {
+                error("#22 - Unknown identifier '"+tok.image+"' on line "
+                     +tok.beginLine+" at position "+tok.beginColumn
+                     +" is undeclared as type alias or variable.");
+                return tok.image;
+            }
+        }
+    |
+        tok  = "@"
+        name = Name()
+        {
+            if(unitName.compareTo(name)==0)
+            {
+                error("#25 - Illegal type alias for class; use 'it' "
+                     +"for static class reference on line "+tok.beginLine
+                     +" at position "+tok.beginColumn+".");
+            }
+        }
+        "="
+        tok  = IdTok()
+        {
+            staticExpFlag = true;
+            if(hasName(name))
+                error("#27 - Duplicate namespace '"+name
+                     +"' already has name "
+                     +"alias; namespace is repeated; at line: "
+                     +tok.beginLine+" position: "+tok.beginColumn
+                     +" to line: "+tok.endLine
+                     +" position: "+tok.endColumn+".");
+
+            if(hasAlias(tok.image))
+                error("#20 - Duplicate type alias '"+tok.image
+                     +"' is repeated; at line: "+tok.beginLine+" position: "
+                     +tok.beginColumn+" to line: "+tok.endLine+" position: "
+                     +tok.endColumn+".");
+            else
+                addAlias(tok.image,name);
+            return name.toString();
+        }
+    |
+        "it"
+        {
+            staticExpFlag = true;
+            return unitName.toString();
+        }
+    |
+        tok = "my"
+        {
+            if(staticCtxFlag)
+                error("#23 - Context of instance reference 'my' on line "
+                     +tok.beginLine+" at position "+tok.beginColumn
+                     +" is within static context.");
+                return "this.my";
+        }
+    |
+        "nil"
+        { return "RT.nil()";                    }
+    |
+        expr = Lit()
+        { return "RT.lit("+expr+")";            }
+    |
+        "("
+        expr = Expr()
+        { return "RT.expr("+expr+")";           }
+        ")"
+    )
+}
+
+String Id() :
+{
+    Token tok = null;
+}
+{
+    //tok = <IDENTIFIER>
+    tok = IdTok()
+    { 
+        return tok.image;    
+    }
+}
+
+Token IdTok() :
+{
+    Token tok = null;
+}
+{
+    tok = <IDENTIFIER>
+    { 
+        if(tok.image.length() > MAX_ID_LEN )
+        {
+            error("#31 - Constraint for identifier lexeme '"+tok.image
+                 +"' exceeds maximum length of "+(MAX_ID_LEN)
+                 +" characters for an identifier on line: "+tok.beginLine
+                 +" at position "+tok.beginColumn+".");
+        }
+   
+        if(isHostKeyword(tok.image))
+        {
+            error("#32 - Illegal identifier lexeme used '"+tok.image
+                 +"' is host language keyword on line "+tok.beginLine
+                 +" at position "+tok.beginColumn+".");
+        }
+        
+        return tok;      
+    }
+}
+
+//NAME ::= ID ( "." ID )*
+Name Name() :
+{
+    String id   = null;
+    Name   name = new Name();
+}
+{
+    id = Id()
+    { name.add(id);        }
+    (
+       "."
+       id = Id()
+       { name.add(id);     }
+    )*
+    { return name;         }
+}
+
+String Lit() :
+{
+    String result = null;
+}
+{
+    (
+        result = LiteralNumber()
+        { return result;            }
+    |
+        result = LiteralString()
+        { return result;            }
+    )
+}
+
+String LiteralString() :
+{
+    Token tok = null;
+}
+{
+    tok = <CHARACTER_LITERAL>
+    { return tok.image;        }
+    |
+    tok = <STRING_LITERAL>
+    { 
+        if(tok.image.length() > MAX_LIT_STRING_LEN)
+        {
+            error("#30 - Constraint for literal lexeme '"+tok.image
+                 +"' exceeds maximum length of "+(MAX_LIT_STRING_LEN)
+                 +" characters for a string literal on line: "
+                         +tok.beginLine+" at position "+tok.beginColumn+".");
+        }
+
+        return tok.image;        
+    }
+}
+
+String LiteralNumber() :
+{
+    Token tok = null;
+}
+{
+    tok = <FLOATING_POINT_LITERAL>
+    { 
+        if(!checkRangeDbl(tok.image))    
+        {
+                        error("#33 - Constraint of literal floating number '"+tok.image
+                                 +"' value on line "+tok.beginLine               
+                                 +" at position "+tok.beginColumn
+                                 +" exceeds range for numeric literal.");
+        
+        }
+        return tok.image;            
+
+    }
+    |
+    tok = <INTEGER_LITERAL>
+    { 
+        if(!checkRangeLng(tok.image))
+        {                                      
+                        error("#34 - Constraint of literal integral number '"+tok.image
+                                 +"' value on line "+tok.beginLine               
+                                 +" at position "+tok.beginColumn
+                                 +" exceeds range for numeric literal.");        
+        }
+        return tok.image;  
+
+    }
+}
+
+//EXPRLIST ::= EXPR ( "," EXPR )*
+String ExprList() :
+{
+    String expr = null;
+    Code   code = new Code();
+}
+{
+    expr = Expr()
+    {   code.add(expr);           }
+    (
+        LOOKAHEAD(3)
+        ","
+        {   code.add(",");        }
+        expr = Expr()
+        {   code.add(expr);       }
+    )*
+    {   return code.toString();   }
+}
+
+//IDLIST ::= ID ( "," ID )*
+String[] IdList() :
+{
+    StringVector list = new StringVector();
+    String       id   = null;
+}
+{
+    id = Id()
+    {   list.add(id);          }
+    (
+        LOOKAHEAD(2)
+        ","
+        id = Id()
+        {   list.add(id);      }
+    )*
+    {   return list.toArray(); }
+}

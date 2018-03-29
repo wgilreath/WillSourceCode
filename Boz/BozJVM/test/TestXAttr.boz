@@ -1,0 +1,34 @@
+class com.williamgilreath.TestSAttr :
+
+    @Bool = True, False;
+
+    + True = "true" ;
+
+    + Attr = 0;
+    ~ Attr = 1;
+
+    @ Attr = a,b;
+
+
+    /* test comment offset position of Bool */
+    # test comment */
+    @ Types = Int , Bool , Real ;
+
+    @myEnum = Const0, Const1;
+
+    +Const1 = 0 ; #illegal constant attribute declaration value line 3, position 4.
+
+    -SAttr0 = nil;  #duplicate singular attribute line 4, pos 2.
+    -SAttr1 = nil;
+
+    @one  = One;  #enum list < 2
+
+    +Const2 = nil ; #illegal constant attribute declaration value line 8, position 4.
+                   #duplicate constant attribute line 8, pos 2.
+
+    ~IAttr0 = nil;
+    ~IAttr1 = nil; #duplicate instance attribute line 7, pos 2.
+
+:
+    exit:0;
+.

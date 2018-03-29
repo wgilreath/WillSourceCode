@@ -1,0 +1,45 @@
+class com.williamgilreath.TestLit :
+
+
+:
+   %x = 77;
+   %y = nil;
+   %z = < > ;
+   %q = "hello";
+   %w = 'doh!';
+
+/*
+   on(x+1)
+   | i   : ;
+   | 0   : my!meth0;
+   | 1,2 : my!meth12;
+   | 3,4 : my!meth34;
+   | 8,q,9 : ;
+   | j+1 : ;
+   | (q*2) : ;
+   | 0   : ;
+   else
+       ;
+   .
+*/
+
+
+on(x)
+| 0: ;
+| 1:
+     on(y)
+     | 0: ;
+     | 1: ;
+     | 0: ;
+     .
+| 0: ;
+| 1,2,0: ;
+.
+
+done;
+
+= 0;
+
+    exit: 0;
+
+.

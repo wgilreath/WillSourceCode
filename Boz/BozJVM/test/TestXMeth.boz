@@ -1,0 +1,63 @@
+class com.williamgilreath.TestXMeth :
+
+
+
+!instanceMethod @params :
+    ;
+    done;
+.
+
+!instanceMethodQ @params :
+    ;
+    done;
+.
+
+!instanceMethodJ arg0, arg1 :   #instanceMethod2
+    ;
+    done;
+.
+
+!instanceMethodK x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15 :
+    ;
+    done;
+.
+
+!singularMethodK x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15 :
+    ;
+    done;
+.
+
+!repeat @params :
+    ;
+    done;
+.
+
+!repeatF :
+    ;
+    done;
+.
+
+!repeatF arg0 :
+    ;
+    done;
+.
+
+&singularMethod @params :
+    ;
+    done;
+.
+
+&staticMethodY :
+    ;
+    done;
+.
+
+&singularMethodK arg0, arg1, arg2 :
+    ;
+    done;
+.
+
+
+:
+    exit:0;
+.
